@@ -3,7 +3,7 @@
 
 ## Load base library
 scriptDir=$(dirname "$BASH_SOURCE")
-source "$scriptDir/baselib.sh"
+source "$scriptDir/com.cyberinternauts.linux.libraries/baselib.sh"
 
 
 ### TODO: Delete: /share/homes/Spectacles/@Test && /share/homes/Spectacles/@__thumb
