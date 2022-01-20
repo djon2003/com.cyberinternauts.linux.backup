@@ -7,8 +7,7 @@ source "$scriptDir/com.cyberinternauts.linux.libraries/baselib.sh"
 
 
 ### TODO: Delete: /share/homes/Spectacles/@Test && /share/homes/Spectacles/@__thumb
-#echo "WORKING"
-#exit
+echo "WORKING"
 
 ## Ensure softwares needed exist, if so update it if necessary
 isExisting=$(isProgramExist "diff")
@@ -33,10 +32,6 @@ launchOnlyOnce
 # Switch to script directory
 setDirToScriptOne
 
-# Activate logs
-###D 
-activateLogs
-
 #### #### #### #### #### #### #### ####
 ## Base variables definitions
 #### #### #### #### #### #### #### ####
@@ -49,7 +44,8 @@ params_needed=("DISK" "FULL-RANGE" "EMAIL")
 ## Functions definitions
 #### #### #### #### #### #### #### ####
 
-function getDiskFreeSpace() {
+function getDiskFreeSpace()
+{
 	local diskSpaceLine2
 	local diskSpaceLine=$(df -m $diskPath)
 	IFS=' ' read -rd '' -a diskSpaceLine2 <<< "$diskSpaceLine"
@@ -58,9 +54,10 @@ function getDiskFreeSpace() {
 	echo $freeSpace
 }
 
+function getParamValue()
 # Param 1 = ParamKey
 # Param 2 = DefaultValue
-function getParamValue() {
+{
 	local value="$2"
 	for iK in ${!params_keys[@]}; do
 		i=${params_keys[$iK]}
@@ -71,21 +68,50 @@ function getParamValue() {
 	echo $value
 }
 
-function ensureDiskConnected() {
+function ensureDiskConnected()
+{
 	local testingFile="$diskPath/test.testing$.$test"
 	local mountExists=$(mount -l | grep $diskPath)
 	local writePossible=$(echo "Y" > "$testingFile" && echo "1")
+	
+	###TODO: Shall not exist but return 1 if failing and 0 if success and the callee shall stop what it is doing to be able to send an error email
 	if [ "$mountExists" = "" ] || [ "$writePossible" = "" ]; then
-		echo "Disk $diskName disconnected or impossible to write a test file"
+		echo "Disk $diskName disconnected or impossible to write a test file" >&2
 		exit
 	fi
 	
 	rm -rf "$testingFile" 2>/dev/null # Skip error once
 	if [ $? -ne 0 ]; then
 		rm -rf "$testingFile" 2>/dev/null
-		echo "Disk $diskName disconnected or impossible to delete the test file"
+		echo "Disk $diskName disconnected or impossible to delete the test file" >&2
 		exit
 	fi
+}
+
+renameFunction sendMail __sendMail
+function sendMail()
+# $1 = is this an error (Value "Y" means yes, all others mean no)
+# $2 = email object
+# $3 = email content
+{
+	local isError=$1
+	if [ "$isError" != "Y" ]; then
+		isError=""
+	fi
+	local emailObject=$2
+	local emailContent=$3
+	local email=$(getParamValue "EMAIL")
+	local errorEmail=$(getParamValue "ERROR-EMAIL" "$email")
+	
+	if [ "$isError" != "" ]; then
+		email="$errorEmail"
+	fi
+	
+	if [ "$email" = "" ]; then
+		return
+	fi
+	
+	__sendMail "$emailObject" "$email" "$email" "$emailContent"
 }
 
 #### #### #### #### #### #### #### ####
@@ -97,12 +123,12 @@ echo "Backup started"
 fileName=$1
 
 if [ "$#" -eq 0 ]; then
-	echo "Backup shall be called with a configuration filename"
+	echo "Backup shall be called with a configuration filename" >&2
 	exit
 fi
 
 if [ ! -f "$fileName" ]; then
-	echo "Configuration file doesn't exist : $fileName"
+	echo "Configuration file doesn't exist : $fileName" >&2
 	exit
 fi
 
@@ -169,6 +195,7 @@ if [ ${#exclusions[@]} -ne 0 ]; then
 fi
 
 ## Ensure all needed params were found in configuration file
+confError=""
 for iK in ${!params_needed[@]}; do
 	foundKey=0
 	valueKey=0
@@ -182,15 +209,27 @@ for iK in ${!params_needed[@]}; do
 	done
 	
 	if [ $foundKey -eq 0 ]; then
-		echo "Key $i not found in configuration file"
-		exit
+		confError="${confError}Key $i not found in configuration file\n"
 	else
 		if [ "${params_values[$valueKey]}" = "" ]; then
-			echo "Key $i is empty in configuration file"
-			exit
+			confError="${confError}Key $i is empty in configuration file\n"
 		fi
 	fi
 done
+
+
+## Activate logs
+logOutput=$(getParamValue "LOG-OUTPUT" "DISK")
+logLevel=$(getParamValue "LOG-LEVEL" "NORMAL")
+activateLogs "$logOutput"
+
+
+## Output configuration file errors after logs activation so it can be logged.
+if [ "$confError" != "" ]; then
+	printf "$confError" >&2
+	sendMail "Y" "Configuration file errors" "Configuration file: $1\n\n$confError"
+	exit
+fi
 
 ## Add baseDir to relative folders and ensure each one exists
 baseDir=$(getParamValue "BASE-DIR" "$defaultBaseDir")
@@ -209,7 +248,9 @@ done
 
 ## Ensure at least one folder to synch
 if [ ${#folders[@]} -eq 0 ]; then
-	echo "No folder set to backup."
+	mailMessage="No folder set to backup."
+	echo "$mailMessage" >&2
+	sendMail "N" "QNAP - Missing folder to backup" "$mailMessage"
 	exit
 fi
 
@@ -242,14 +283,16 @@ for i in ${mountedDisks2[@]}; do
 done
 
 if [ $foundDiskCount -eq 0 ]; then
-	echo "No USB disk found starting with name $wantDiskName"
-	send_mail "QNAP - Missing disk" "$email" "$email" "No USB disk found starting with name $wantDiskName"
+	mailMessage="No USB disk found starting with name $wantDiskName"
+	echo "$mailMessage" >&2
+	sendMail "N" "QNAP - Missing disk" "$mailMessage"
 	exit
 fi
 
 if [ $foundDiskCount -ne 1 ]; then
-	echo "More than one USB disk found starting with name $wantDiskName"
-	send_mail "QNAP - More than one disk" "$email" "$email" "More than one USB disk found starting with name $wantDiskName"
+	mailMessage="More than one USB disk found starting with name $wantDiskName"
+	echo "$mailMessage" >&2
+	sendMail "N" "QNAP - More than one disk" "$mailMessage"
 	exit
 fi
 
@@ -258,7 +301,9 @@ diskErrorFile="$dbDir/$wantDiskName..check"
 ls -R "$diskPath/" 1> /dev/null 2> "$diskErrorFile"
 isError=$(ls -s "$diskErrorFile" | awk '{print $1}')
 if [ ! "$isError" = "0" ]; then
-	send_mail "QNAP - Disk having errors" "$email" "$email" "Disk $foundDiskName has errors. Please do a file verification."
+	mailMessage="Disk $foundDiskName has errors. Please do a file verification."
+	echo "$mailMessage" >&2
+	sendMail "Y" "QNAP - Disk having errors" "$mailMessage"
 fi
 
 ## Set FULL-RANGE-MAX and FULL-RANGE-MIN
@@ -272,8 +317,7 @@ echo "Will backup on $diskPath named $foundDiskName"
 freeSpace=$(getDiskFreeSpace)
 if [ ! $freeSpace -gt $fullRangeMin ]; then
 	echo "Space minimum reached"
-	email=$(getParamValue "EMAIL")
-	send_mail "QNAP - External disk full" "$email" "$email" "Disk $foundDiskName is full. Please remove this one and put another one with the name starting with $wantDiskName"
+	sendMail "N" "QNAP - External disk full" "Disk $foundDiskName is full. Please remove this one and put another one with the name starting with $wantDiskName"
 	exit
 fi
 leftSpace=1 # Set it over zero because if first folder to copy only has empty folders (which are not copied), then condition at the end of the loop shall pass
@@ -297,12 +341,11 @@ for iK in ${!folders[@]}; do
 	###D
 	#if [ 1 = 2 ]; then
 	## List files/folders to backup
+	errorsToFilter=("${exclusions[@]}")
 	if [ $lsMethod -eq 1 ]; then
-		errorsToFilter=("${exclusions[@]}")
 		executeAndFilterErrors "${errorsToFilter[@]}" "ls -lLAesR \"$i\" >\"$folderDb.fetch-1\""
 	else
 		# Columns of "ls" shall be SizeInBlock Rights User Group Size MonthAsThreeLetters DayOfMonth Time(HH:mm:ss) Year FileName
-		errorsToFilter=("${exclusions[@]}")
 		executeAndFilterErrors "${errorsToFilter[@]}" "ls -lLAsR --time-style=\"+%b %d %H:%M:%S %Y\" \"$i\" >\"$folderDb.fetch-1\""
 	fi
 	
@@ -321,6 +364,7 @@ for iK in ${!folders[@]}; do
 
 	## Remove not desired folders
 	if [ ! "$exclusionFilter" = "" ]; then
+		echo "Using filter: $exclusionFilter"
 		cat "$folderDb.fetch-3" | sed -E "s/^.*$exclusionFilter.*$//" | sed '/^$/d' > "$folderDb.size"
 	else
 		cp "$folderDb.fetch-3" "$folderDb.size"
@@ -456,7 +500,7 @@ for iK in ${!folders[@]}; do
 					###D 
 					echo "$line" >> "$folderDb.list"
 				else
-					echo "Error - exit code: $?"
+					echo "Error - exit code: $?" >&2
 				fi
 			else
 				break
@@ -481,8 +525,7 @@ if [ ! $freeSpace -gt $fullRangeMax ]; then
 	fi
 
 	echo "Space minimum reached"
-	email=$(getParamValue "EMAIL")
-	send_mail "QNAP - External disk full" "$email" "$email" "Disk $foundDiskName is full. Please remove this one and connect another one with a name starting with $wantDiskName"
+	sendMail "N" "QNAP - External disk full" "Disk $foundDiskName is full. Please remove this one and connect another one with a name starting with $wantDiskName"
 	exit
 fi
 
@@ -495,8 +538,7 @@ if [ "$isFileDescriptor3Exist" = "Y" ]; then
 		echo "Sending error email"
 		logFileName=$(basename "$logFile")
 		logFileContent=$(cat "$logFile")
-		email=$(getParamValue "EMAIL")
-		send_mail "QNAP - Backup error" "$email" "$email" "Error happened on backup. See log file $logFileName\n\nLog error file content:\n$logFileContent"
+		sendMail "Y" "QNAP - Backup error" "Error happened on backup. See log file $logFileName\n\nLog error file content:\n$logFileContent"
 		exit
 	fi
 fi
