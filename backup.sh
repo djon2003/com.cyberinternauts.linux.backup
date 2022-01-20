@@ -114,6 +114,19 @@ function sendMail()
 	__sendMail "$emailObject" "$email" "$email" "$emailContent"
 }
 
+function addLog()
+# $1 level of the log (D or DEBUG, N or NORMAL)
+# $2 log content
+{
+	local thisLogLevel=$1
+	local thisLog=$2
+	if [ "$logLevel" != "DEBUG" ] && ([ "$thisLogLevel" = "D" ] || [ "$thisLogLevel" = "DEBUG" ]); then
+		return
+	fi
+	
+	echo "$thisLog"
+}
+
 #### #### #### #### #### #### #### ####
 ## Execution of script
 #### #### #### #### #### #### #### ####
@@ -221,6 +234,9 @@ done
 ## Activate logs
 logOutput=$(getParamValue "LOG-OUTPUT" "DISK")
 logLevel=$(getParamValue "LOG-LEVEL" "NORMAL")
+if [ "$logLevel" != "DEBUG" ] && [ "$logLevel" != "ERRORS" ]; then
+	logLevel="NORMAL"
+fi
 activateLogs "$logOutput"
 
 
@@ -313,10 +329,10 @@ fullRangeMax=${fullRange[1]}
 fullRangeMin=${fullRange[0]}
 
 ## Ensure space is enough high on disk
-echo "Will backup on $diskPath named $foundDiskName"
+addLog "N" "Will backup on $diskPath named $foundDiskName"
 freeSpace=$(getDiskFreeSpace)
 if [ ! $freeSpace -gt $fullRangeMin ]; then
-	echo "Space minimum reached"
+	addLog "N" "Space minimum reached"
 	sendMail "N" "QNAP - External disk full" "Disk $foundDiskName is full. Please remove this one and put another one with the name starting with $wantDiskName"
 	exit
 fi
@@ -334,7 +350,7 @@ for iK in ${!folders[@]}; do
 	ensureDiskConnected
 
 	i="${folders[$iK]}"
-	echo "Folder $i"
+	addLog "N" "Folder $i"
 	folderDb=$(echo "$i" | tr / .)
 	folderDb="$dbDir/$wantDiskName$folderDb"
 	
@@ -349,7 +365,7 @@ for iK in ${!folders[@]}; do
 		executeAndFilterErrors "${errorsToFilter[@]}" "ls -lLAsR --time-style=\"+%b %d %H:%M:%S %Y\" \"$i\" >\"$folderDb.fetch-1\""
 	fi
 	
-	echo "Listing done"
+	addLog "N" "Listing done"
 	
 	## Remove symbolic links
 	cat "$folderDb.fetch-1" | grep -v "^[ ]*[0-9]\+[ ]\+l" > "$folderDb.fetch-2"
@@ -364,13 +380,13 @@ for iK in ${!folders[@]}; do
 
 	## Remove not desired folders
 	if [ ! "$exclusionFilter" = "" ]; then
-		echo "Using filter: $exclusionFilter"
+		addLog "N" "Using filter: $exclusionFilter"
 		cat "$folderDb.fetch-3" | sed -E "s/^.*$exclusionFilter.*$//" | sed '/^$/d' > "$folderDb.size"
 	else
 		cp "$folderDb.fetch-3" "$folderDb.size"
 	fi
 	
-	echo "Rearranging done"
+	addLog "N" "Rearranging done"
 	
 	## Prepare DB files for comparison
 	sort "$folderDb.size" > "$folderDb.size-s"
@@ -409,7 +425,7 @@ for iK in ${!folders[@]}; do
 	# Copy .size-s over .size-old-s
 	cp "$folderDb.size-s" "$folderDb.size-old-s"
 	
-	echo "Files comparison done"
+	addLog "N" "Files comparison done"
 	
 	exit
 	###D
@@ -443,10 +459,10 @@ for iK in ${!folders[@]}; do
 		
 		line=$(echo "$line" | sed 's/|//')
 		
-		echo "||E=$elementToCopy||"
-		echo "||L=$line||"
-		echo "||EK=$elementToCopyKey||"
-		echo "||ES=$elementToCopySize||$elementToCopyHasChanged||"
+		addLog "D" "||E=$elementToCopy||"
+		addLog "D" "||L=$line||"
+		addLog "D" "||EK=$elementToCopyKey||"
+		addLog "D" "||ES=$elementToCopySize||$elementToCopyHasChanged||"
 		
 		if [ -d "$elementToCopy" ]; then
 			if [ "$elementToCopyHasChanged" = "1" ]; then
@@ -460,13 +476,13 @@ for iK in ${!folders[@]}; do
 		else
 			ensureDiskConnected
 
-			echo "To copy : $elementToCopy"
+			addLog "N" "To copy : $elementToCopy"
 			leftSpace=$(getDiskFreeSpace)
 			###D 
-			echo "||LS=$leftSpace||"
+			addLog "D" "||LS=$leftSpace||"
 			leftSpace=$((($leftSpace << 10) - ($elementToCopySize) - ($fullRangeMin << 10)))
 			###D 
-			echo "||LS=$leftSpace||"
+			addLog "D" "||LS=$leftSpace||"
 			
 			if [ "$leftSpace" -gt 0 ]; then
 				fileName=$(echo "$elementToCopy" | awk -F "/" '{print $NF}')
@@ -480,7 +496,7 @@ for iK in ${!folders[@]}; do
 				
 				###D 
 				mkdir -p "$diskPath/$lastDir/$pathEnd"
-				echo "Copying : $diskPath/$lastDir/$pathEnd$fileName"
+				addLog "N" "Copying : $diskPath/$lastDir/$pathEnd$fileName"
 				if [ -f "$diskPath/$lastDir/$pathEnd$fileName" ]; then
 					a=1
 					###D 
@@ -524,7 +540,7 @@ if [ ! $freeSpace -gt $fullRangeMax ]; then
 		cp -a "$dbDir" "$dbDir.save.$foundDiskName"
 	fi
 
-	echo "Space minimum reached"
+	addLog "N" "Space minimum reached"
 	sendMail "N" "QNAP - External disk full" "Disk $foundDiskName is full. Please remove this one and connect another one with a name starting with $wantDiskName"
 	exit
 fi
@@ -535,7 +551,7 @@ if [ "$isFileDescriptor3Exist" = "Y" ]; then
 	logFile=$(readlink /proc/self/fd/3 | sed s/.log$/.err/)
 	logFileSize=$(stat -c %s "$logFile")
 	if [ $logFileSize -gt 0 ]; then
-		echo "Sending error email"
+		addLog "N" "Sending error email"
 		logFileName=$(basename "$logFile")
 		logFileContent=$(cat "$logFile")
 		sendMail "Y" "QNAP - Backup error" "Error happened on backup. See log file $logFileName\n\nLog error file content:\n$logFileContent"
@@ -543,4 +559,4 @@ if [ "$isFileDescriptor3Exist" = "Y" ]; then
 	fi
 fi
 
-echo "Backup done"
+addLog "N" "Backup done"
