@@ -4,6 +4,7 @@
 ## Load base library
 scriptDir=$(dirname "$BASH_SOURCE")
 source "$scriptDir/com.cyberinternauts.linux.libraries/baselib.sh"
+source "$scriptDir/backuplib.sh"
 
 
 ## Ensure softwares needed exist, if so update it if necessary
@@ -36,20 +37,11 @@ setDirToScriptOne
 defaultBaseDir="/share/homes"
 declare -a params_needed
 params_needed=("DISK" "FULL-RANGE" "EMAIL")
+sentErrorMail="N"
 
 #### #### #### #### #### #### #### ####
 ## Functions definitions
 #### #### #### #### #### #### #### ####
-
-function getDiskFreeSpace()
-{
-	local diskSpaceLine2
-	local diskSpaceLine=$(df -m $diskPath)
-	IFS=' ' read -rd '' -a diskSpaceLine2 <<< "$diskSpaceLine"
-	local freeSpace=$((${diskSpaceLine2[7]} - ${diskSpaceLine2[8]}))
-	
-	echo $freeSpace
-}
 
 function getParamValue()
 # Param 1 = ParamKey
@@ -65,26 +57,6 @@ function getParamValue()
 	echo $value
 }
 
-function ensureDiskConnected()
-{
-	local testingFile="$diskPath/test.testing$.$test"
-	local mountExists=$(mount -l | grep $diskPath)
-	local writePossible=$(echo "Y" > "$testingFile" && echo "1")
-	
-	###TODO: Shall not exist but return 1 if failing and 0 if success and the callee shall stop what it is doing to be able to send an error email
-	if [ "$mountExists" = "" ] || [ "$writePossible" = "" ]; then
-		echo "Disk $diskName disconnected or impossible to write a test file" >&2
-		exit
-	fi
-	
-	rm -rf "$testingFile" 2>/dev/null # Skip error once
-	if [ $? -ne 0 ]; then
-		rm -rf "$testingFile" 2>/dev/null
-		echo "Disk $diskName disconnected or impossible to delete the test file" >&2
-		exit
-	fi
-}
-
 renameFunction sendMail __sendMail
 function sendMail()
 # $1 = is this an error (Value "Y" means yes, all others mean no)
@@ -93,6 +65,7 @@ function sendMail()
 {
 	local isError=$1
 	if [ "$isError" != "Y" ]; then
+		sentErrorMail="Y"
 		isError=""
 	fi
 	local emailObject=$2
@@ -111,21 +84,13 @@ function sendMail()
 	__sendMail "$emailObject" "$email" "$email" "$emailContent"
 }
 
-function addLog()
-# $1 level of the log (D or DEBUG, N or NORMAL)
-# $2 log content
-{
-	local thisLogLevel=$1
-	local thisLog=$2
-	if [ "$logLevel" != "DEBUG" ] && ([ "$thisLogLevel" = "D" ] || [ "$thisLogLevel" = "DEBUG" ]); then
-		return
-	fi
-	
-	echo "$thisLog"
-}
-
 function sendErrorMailOnExit()
 {
+	if [ "$sentErrorMail" = "N" ]; then
+		# Already sent email about the error
+		return
+	fi
+
 ###TODO: When logs are set to BOTH, this code doesn't work because FD#3 is pointing to STDOUT. See my question: https://stackoverflow.com/questions/70836246/
 	## If errors happened, then send email
 	local isFileDescriptor3Exist=$(command 2>/dev/null >&3 && echo "Y")
@@ -285,59 +250,9 @@ if [ ${#folders[@]} -eq 0 ]; then
 	exit
 fi
 
-## Look if needed disk is connected (and only one !) and get its mounted path
-mountedDisks=$(mount -l | grep /share/external/ | grep /dev/sd)
-IFS=$'\n' read -rd '' -a mountedDisks2 <<< "$mountedDisks"
-
-foundDiskCount=0
-diskPath=""
-getDiskPath=0
+## Ensure USB disk is connected and OK
 wantDiskName=$(getParamValue "DISK")
-foundDiskName=""
-for i in ${mountedDisks2[@]}; do
-	if [[ $getDiskPath -eq 2 ]]; then
-		diskPath=$i
-		getDiskPath=0
-	fi
-	if [[ $getDiskPath -eq 1 ]]; then
-		getDiskPath=2
-	fi
-	
-	if [[ $i = \/dev\/* ]] ; then
-		diskName=$(blkid -s LABEL -o value $i)
-		if [[ "$diskName" = $wantDiskName* ]]; then
-			foundDiskName=$diskName
-			foundDiskCount=$((foundDiskCount+1))
-			getDiskPath=1
-		fi
-	fi
-done
-addLog "D" "DiskName=$diskName"
-addLog "D" "FoundDiskName=$foundDiskName"
-
-if [ $foundDiskCount -eq 0 ]; then
-	mailMessage="No USB disk found starting with name $wantDiskName"
-	echo "$mailMessage" >&2
-	sendMail "N" "QNAP - Missing disk" "$mailMessage"
-	exit
-fi
-
-if [ $foundDiskCount -ne 1 ]; then
-	mailMessage="More than one USB disk found starting with name $wantDiskName"
-	echo "$mailMessage" >&2
-	sendMail "N" "QNAP - More than one disk" "$mailMessage"
-	exit
-fi
-
-## Verify if no error on disk
-diskErrorFile="$dbDir/$wantDiskName..check"
-ls -R "$diskPath/" 1> /dev/null 2> "$diskErrorFile"
-isError=$(ls -s "$diskErrorFile" | awk '{print $1}')
-if [ ! "$isError" = "0" ]; then
-	mailMessage="Disk $foundDiskName has errors. Please do a file verification."
-	echo "$mailMessage" >&2
-	sendMail "Y" "QNAP - Disk having errors" "$mailMessage"
-fi
+ensureDisk "$wantDiskName"
 
 ## Set FULL-RANGE-MAX and FULL-RANGE-MIN
 fullRangeVal=$(getParamValue "FULL-RANGE")
@@ -346,8 +261,7 @@ fullRangeMax=${fullRange[1]}
 fullRangeMin=${fullRange[0]}
 
 ## Ensure space is enough high on disk
-addLog "N" "Will backup on $diskPath named $foundDiskName"
-freeSpace=$(getDiskFreeSpace)
+freeSpace=$(getDiskFreeSpace "$diskPath")
 if [ ! $freeSpace -gt $fullRangeMin ]; then
 	addLog "N" "Space minimum reached"
 	sendMail "N" "QNAP - External disk full" "Disk $foundDiskName is full. Please remove this one and put another one with the name starting with $wantDiskName"
@@ -364,14 +278,15 @@ initialDir=$(pwd)
 
 ## Loop through folders to backup
 for iK in ${!folders[@]}; do
-	ensureDiskConnected
+	ensureDiskConnected "$diskPath" "$foundDiskName"
 
 	currentFolder="${folders[$iK]}"
 	addLog "N" "Folder $currentFolder"
 	folderDb=$(echo "$currentFolder" | tr / .)
 	folderDb="$dbDir/$wantDiskName$folderDb"
 	
-	## List files/folders to backup
+	
+	## List files/subfolders to backup
 	errorsToFilter=("${exclusions[@]}")
 	if [ $lsMethod -eq 1 ]; then
 		executeAndFilterErrors "${errorsToFilter[@]}" "ls -lLAesR \"$currentFolder\" >\"$folderDb.fetch-1\""
@@ -477,10 +392,10 @@ for iK in ${!folders[@]}; do
 			fi
 			echo "$line" >> "$folderDb.list"
 		else
-			ensureDiskConnected
+			ensureDiskConnected "$diskPath" "$foundDiskName"
 
 			addLog "N" "To copy : $elementToCopy"
-			leftSpace=$(getDiskFreeSpace)
+			leftSpace=$(getDiskFreeSpace "$diskPath")
 			addLog "D" "||LS=$leftSpace||"
 			leftSpace=$((($leftSpace << 10) - ($elementToCopySize) - ($fullRangeMin << 10)))
 			addLog "D" "||LS=$leftSpace||"
@@ -530,7 +445,7 @@ done
 
 
 ## If disk free space under FULL-RANGE-MAX, then send email + copy DB if params say so
-freeSpace=$(getDiskFreeSpace)
+freeSpace=$(getDiskFreeSpace "$diskPath")
 if [ ! $freeSpace -gt $fullRangeMax ]; then
 	shallCopyDB=$(getParamValue "COPY-DB-ON-DISK-FULL" "Y")
 	if [ "$shallCopyDB" = "Y" ]; then
