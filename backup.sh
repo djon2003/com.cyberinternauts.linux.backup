@@ -312,6 +312,8 @@ for i in ${mountedDisks2[@]}; do
 		fi
 	fi
 done
+addLog "D" "DiskName=$diskName"
+addLog "D" "FoundDiskName=$foundDiskName"
 
 if [ $foundDiskCount -eq 0 ]; then
 	mailMessage="No USB disk found starting with name $wantDiskName"
@@ -364,18 +366,18 @@ initialDir=$(pwd)
 for iK in ${!folders[@]}; do
 	ensureDiskConnected
 
-	i="${folders[$iK]}"
-	addLog "N" "Folder $i"
-	folderDb=$(echo "$i" | tr / .)
+	currentFolder="${folders[$iK]}"
+	addLog "N" "Folder $currentFolder"
+	folderDb=$(echo "$currentFolder" | tr / .)
 	folderDb="$dbDir/$wantDiskName$folderDb"
 	
 	## List files/folders to backup
 	errorsToFilter=("${exclusions[@]}")
 	if [ $lsMethod -eq 1 ]; then
-		executeAndFilterErrors "${errorsToFilter[@]}" "ls -lLAesR \"$i\" >\"$folderDb.fetch-1\""
+		executeAndFilterErrors "${errorsToFilter[@]}" "ls -lLAesR \"$currentFolder\" >\"$folderDb.fetch-1\""
 	else
 		# Columns of "ls" shall be SizeInBlock Rights User Group Size MonthAsThreeLetters DayOfMonth Time(HH:mm:ss) Year FileName
-		executeAndFilterErrors "${errorsToFilter[@]}" "ls -lLAsR --time-style=\"+%b %d %H:%M:%S %Y\" \"$i\" >\"$folderDb.fetch-1\""
+		executeAndFilterErrors "${errorsToFilter[@]}" "ls -lLAsR --time-style=\"+%b %d %H:%M:%S %Y\" \"$currentFolder\" >\"$folderDb.fetch-1\""
 	fi
 	
 	addLog "N" "Listing done"
@@ -445,7 +447,7 @@ for iK in ${!folders[@]}; do
 	## - Check if enough space to copy on disk and would still be over FULL-RANGE-MIN after copy
 	## - Copy on disk
 	## - Add to the .list
-	lastDir=$(echo "$i" | awk -F "/" '{print $NF}')
+	lastDir=$(echo "$currentFolder" | awk -F "/" '{print $NF}')
 	while IFS='' read -r line || [[ -n "$line" ]]; do
 		if [ "$line" = "" ]; then
 			continue
@@ -486,15 +488,21 @@ for iK in ${!folders[@]}; do
 			if [ "$leftSpace" -gt 0 ]; then
 				fileName=$(echo "$elementToCopy" | awk -F "/" '{print $NF}')
 				pathEnd=$(dirname "$elementToCopy")
-				if [ "$pathEnd" = "$i" ]; then
+				if [ "$pathEnd" = "$currentFolder" ]; then
 					pathEnd=""
 				else
-					pathEnd=$(echo "$pathEnd" | sed "s|^$i/||")
+					pathEnd=$(echo "$pathEnd" | sed "s|^$currentFolder/||")
 					pathEnd="$pathEnd/"
 				fi
 				
 				mkdir -p "$diskPath/$lastDir/$pathEnd"
 				addLog "N" "Copying : $diskPath/$lastDir/$pathEnd$fileName"
+				addLog "D" "CopyingFrom=$elementToCopy"
+				addLog "D" "CopyingTo=$diskPath/$lastDir/$pathEnd$fileName"
+				addLog "D" "DiskPath=$diskPath"
+				addLog "D" "LastDir=$lastDir"
+				addLog "D" "PathEnd=$pathEnd"
+				addLog "D" "FileName=$fileName"
 				if [ -f "$diskPath/$lastDir/$pathEnd$fileName" ]; then
 					rsync -a --no-compress "$elementToCopy" "$diskPath/$lastDir/$pathEnd$fileName"
 				else
