@@ -127,6 +127,25 @@ function addLog()
 	echo "$thisLog"
 }
 
+function sendErrorMailOnExit()
+{
+###TODO: When logs are set to BOTH, this code doesn't work because FD#3 is pointing to STDOUT. See my question: https://stackoverflow.com/questions/70836246/
+	## If errors happened, then send email
+	local isFileDescriptor3Exist=$(command 2>/dev/null >&3 && echo "Y")
+	if [ "$isFileDescriptor3Exist" = "Y" ]; then
+		local logFile=$(readlink /proc/self/fd/3 | sed s/.log$/.err/)
+		local logFileSize=$(stat -c %s "$logFile")
+		if [ $logFileSize -gt 0 ]; then
+			addLog "N" "Sending error email"
+			local logFileName=$(basename "$logFile")
+			local logFileContent=$(cat "$logFile")
+			sendMail "Y" "QNAP - Backup error" "Error happened on backup. See log file $logFileName\n\nLog error file content:\n$logFileContent"
+		fi
+	fi
+}
+trap sendErrorMailOnExit EXIT
+
+
 #### #### #### #### #### #### #### ####
 ## Execution of script
 #### #### #### #### #### #### #### ####
@@ -543,20 +562,6 @@ if [ ! $freeSpace -gt $fullRangeMax ]; then
 	addLog "N" "Space minimum reached"
 	sendMail "N" "QNAP - External disk full" "Disk $foundDiskName is full. Please remove this one and connect another one with a name starting with $wantDiskName"
 	exit
-fi
-
-## If errors happened, then send email
-isFileDescriptor3Exist=$(command 2>/dev/null >&3 && echo "Y")
-if [ "$isFileDescriptor3Exist" = "Y" ]; then
-	logFile=$(readlink /proc/self/fd/3 | sed s/.log$/.err/)
-	logFileSize=$(stat -c %s "$logFile")
-	if [ $logFileSize -gt 0 ]; then
-		addLog "N" "Sending error email"
-		logFileName=$(basename "$logFile")
-		logFileContent=$(cat "$logFile")
-		sendMail "Y" "QNAP - Backup error" "Error happened on backup. See log file $logFileName\n\nLog error file content:\n$logFileContent"
-		exit
-	fi
 fi
 
 addLog "N" "Backup done"
