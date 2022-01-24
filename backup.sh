@@ -6,9 +6,6 @@ scriptDir=$(dirname "$BASH_SOURCE")
 source "$scriptDir/com.cyberinternauts.linux.libraries/baselib.sh"
 
 
-### TODO: Delete: /share/homes/Spectacles/@Test && /share/homes/Spectacles/@__thumb
-echo "WORKING"
-
 ## Ensure softwares needed exist, if so update it if necessary
 isExisting=$(isProgramExist "diff")
 if [ "$isExisting" = "N" ]; then
@@ -258,7 +255,6 @@ if [ "$logLevel" != "DEBUG" ] && [ "$logLevel" != "ERRORS" ]; then
 fi
 activateLogs "$logOutput"
 
-
 ## Output configuration file errors after logs activation so it can be logged.
 if [ "$confError" != "" ]; then
 	printf "$confError" >&2
@@ -373,8 +369,6 @@ for iK in ${!folders[@]}; do
 	folderDb=$(echo "$i" | tr / .)
 	folderDb="$dbDir/$wantDiskName$folderDb"
 	
-	###D
-	#if [ 1 = 2 ]; then
 	## List files/folders to backup
 	errorsToFilter=("${exclusions[@]}")
 	if [ $lsMethod -eq 1 ]; then
@@ -446,10 +440,6 @@ for iK in ${!folders[@]}; do
 	
 	addLog "N" "Files comparison done"
 	
-	exit
-	###D
-	#fi
-	
 	## For each elements to copy
 	## - Ensure not a folder
 	## - Check if enough space to copy on disk and would still be over FULL-RANGE-MIN after copy
@@ -471,11 +461,6 @@ for iK in ${!folders[@]}; do
 		fi
 		
 		elementToCopy=$(echo "$line" | sed 's|^[^ ]* [^/]*||')
-		###D
-		#if [ ! "/share/homes/external/externe1/Séries télévisés intégrale/Sense & Sensibility/Raison et sentiments INTEGRAL FRENCH DVDRip XviD-LKT/Raison et sentiments episode 2 FRENCH DVDRip XviD-LKT.avi" = "$elementToCopy" ]; then
-		#	continue
-		#fi
-		
 		line=$(echo "$line" | sed 's/|//')
 		
 		addLog "D" "||E=$elementToCopy||"
@@ -485,22 +470,17 @@ for iK in ${!folders[@]}; do
 		
 		if [ -d "$elementToCopy" ]; then
 			if [ "$elementToCopyHasChanged" = "1" ]; then
-				###D
-				a=1
 				sed "\|^$elementToCopyKey |d" "$folderDb.list" > "$folderDb.list2"
 				cp "$folderDb.list2" "$folderDb.list"
 			fi
-			###D 
 			echo "$line" >> "$folderDb.list"
 		else
 			ensureDiskConnected
 
 			addLog "N" "To copy : $elementToCopy"
 			leftSpace=$(getDiskFreeSpace)
-			###D 
 			addLog "D" "||LS=$leftSpace||"
 			leftSpace=$((($leftSpace << 10) - ($elementToCopySize) - ($fullRangeMin << 10)))
-			###D 
 			addLog "D" "||LS=$leftSpace||"
 			
 			if [ "$leftSpace" -gt 0 ]; then
@@ -513,26 +493,18 @@ for iK in ${!folders[@]}; do
 					pathEnd="$pathEnd/"
 				fi
 				
-				###D 
 				mkdir -p "$diskPath/$lastDir/$pathEnd"
 				addLog "N" "Copying : $diskPath/$lastDir/$pathEnd$fileName"
 				if [ -f "$diskPath/$lastDir/$pathEnd$fileName" ]; then
-					a=1
-					###D 
 					rsync -a --no-compress "$elementToCopy" "$diskPath/$lastDir/$pathEnd$fileName"
 				else
-					a=1
-					###D 
 					cp -a "$elementToCopy" "$diskPath/$lastDir/$pathEnd$fileName"
 				fi
 				if [ "$?" -eq "0" ]; then
 					if [ "$elementToCopyHasChanged" = "1" ]; then
-						###D 
-						a=1
 						sed "\|^$elementToCopyKey |d" "$folderDb.list" > "$folderDb.list2"
 						cp "$folderDb.list2" "$folderDb.list"
 					fi
-					###D 
 					echo "$line" >> "$folderDb.list"
 				else
 					echo "Error - exit code: $?" >&2
@@ -541,8 +513,6 @@ for iK in ${!folders[@]}; do
 				break
 			fi
 		fi
-		
-		###D		exit
 	done < "$folderDb.tocopy"
 	
 	if [ ! "$leftSpace" -gt 0 ]; then
