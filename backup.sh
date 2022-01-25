@@ -86,16 +86,16 @@ function sendMail()
 
 function sendErrorMailOnExit()
 {
-	if [ "$sentErrorMail" = "N" ]; then
+	if [ "$sentErrorMail" = "Y" ]; then
 		# Already sent email about the error
 		return
 	fi
 
-###TODO: When logs are set to BOTH, this code doesn't work because FD#3 is pointing to STDOUT. See my question: https://stackoverflow.com/questions/70836246/
+	###TODO: When logs are set to BOTH, this code doesn't work because FD#3 is pointing to STDOUT. See my question: https://stackoverflow.com/questions/70836246/ . I use the "fake" FD#4 to make it work. If no new solution after a month. Remove this TODO. 
 	## If errors happened, then send email
-	local isFileDescriptor3Exist=$(command 2>/dev/null >&3 && echo "Y")
-	if [ "$isFileDescriptor3Exist" = "Y" ]; then
-		local logFile=$(readlink /proc/self/fd/3 | sed s/.log$/.err/)
+	local isFileDescriptor4Exist=$(command 2>/dev/null >&4 && echo "Y")
+	if [ "$isFileDescriptor4Exist" = "Y" ]; then
+		local logFile=$(readlink /proc/self/fd/4 | sed s/.log$/.err/)
 		local logFileSize=$(stat -c %s "$logFile")
 		if [ $logFileSize -gt 0 ]; then
 			addLog "N" "Sending error email"
