@@ -252,7 +252,7 @@ fi
 
 ## Ensure USB disk is connected and OK
 wantDiskName=$(getParamValue "DISK")
-ensureDisk "$wantDiskName"
+ensureDisk "$wantDiskName" "$dbDir"
 
 ## Set FULL-RANGE-MAX and FULL-RANGE-MIN
 fullRangeVal=$(getParamValue "FULL-RANGE")

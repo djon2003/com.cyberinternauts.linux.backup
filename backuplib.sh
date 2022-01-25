@@ -192,6 +192,7 @@ function copyFiles()
 function ensureDisk()
 # Try to find one and only one USB disk connected starting with $1
 # $1 = Disk name starting with
+# $2 = Database path
 # external_set: diskPath, foundDiskName
 {
 	# External variables that will be set
@@ -200,6 +201,7 @@ function ensureDisk()
 
 	# Parameters
 	local wantDiskName="$1"
+	local dbDir="$2"
 
 	## Look if needed disk is connected (and only one !) and get its mounted path
 	local mountedDisks=$(mount -l | grep /share/external/ | grep /dev/sd)
