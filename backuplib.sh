@@ -105,7 +105,8 @@ function copyFiles()
 	## - Copy on disk
 	## - Add to the .list
 	local lastDir=$(echo "$currentFolder" | awk -F "/" '{print $NF}')
-	local elementToCopyKey elementToCopySize elementToCopyHasChanged elementToCopy line leftSpace=0 fileName pathEnd
+	local elementToCopyKey elementToCopySize elementToCopyHasChanged elementToCopy
+	local line leftSpace=0 fileName pathEnd toFile
 	while IFS='' read -r line || [[ -n "$line" ]]; do
 		if [ "$line" = "" ]; then
 			continue
@@ -161,10 +162,12 @@ function copyFiles()
 				addLog "D" "LastDir=$lastDir"
 				addLog "D" "PathEnd=$pathEnd"
 				addLog "D" "FileName=$fileName"
+				
+				toFile="$diskPath/$lastDir/$pathEnd$fileName"
 				if [ -f "$diskPath/$lastDir/$pathEnd$fileName" ]; then
-					rsync -a --no-compress "$elementToCopy" "$diskPath/$lastDir/$pathEnd$fileName"
+					rsync -a --no-compress "$elementToCopy" "$toFile"
 				else
-					cp -a "$elementToCopy" "$diskPath/$lastDir/$pathEnd$fileName"
+					cp -a "$elementToCopy" "$toFile"
 				fi
 				if [ "$?" -eq "0" ]; then
 					if [ "$elementToCopyHasChanged" = "1" ]; then
@@ -173,7 +176,8 @@ function copyFiles()
 					fi
 					echo "$line" >> "$folderDb.list"
 				else
-					echo "Error - exit code: $?" >&2
+					rm "$toFile"
+					echo "Error - copy/rsync exit code: $?" >&2
 				fi
 			else
 				break
