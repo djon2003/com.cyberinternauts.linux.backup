@@ -288,10 +288,6 @@ for iK in ${!folders[@]}; do
 	prepareDatabase "$lsMethod" "$currentFolder" "$folderDb" "$exclusionFilter"
 
 	copyFiles "$currentFolder" "$folderDb" "$diskPath" "$foundDiskName" "$fullRangeMin"
-	
-	if [ "$continueNextFolder" = "0" ]; then
-		break
-	fi
 done
 
 

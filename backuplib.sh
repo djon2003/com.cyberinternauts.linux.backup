@@ -91,7 +91,6 @@ function copyFiles()
 # $3 = diskPath
 # $4 = foundDiskName
 # $5 = fullRangeMin
-# external_out: continueNextFolder
 {
 	local currentFolder="$1"
 	local folderDb="$2"
@@ -105,15 +104,16 @@ function copyFiles()
 	## - Copy on disk
 	## - Add to the .list
 	local lastDir=$(echo "$currentFolder" | awk -F "/" '{print $NF}')
-	local elementToCopyKey elementToCopySize elementToCopyHasChanged elementToCopy
-	local line leftSpace=0 fileName pathEnd toFile
+	local elementToCopyKey elementToCopyDiskSize elementToCopyHasChanged elementToCopy
+	local line leftSpace=0 fileName pathEnd toFile toFileSize toFileDiskSize triedToCopy=1
 	while IFS='' read -r line || [[ -n "$line" ]]; do
 		if [ "$line" = "" ]; then
 			continue
 		fi
 		
 		elementToCopyKey=$(echo "$line" | awk '{print $1}')
-		elementToCopySize=$(echo "$line" | awk '{print $2}')
+		elementToCopyDiskSize=$(echo "$line" | awk '{print $2}')
+		elementToCopySize=$(echo "$line" | awk '{print $3}')
 		elementToCopyHasChanged=$(echo "$line" | awk '{print $4}' | sed 's/[A-Za-z]//g')
 		if [ "$elementToCopyHasChanged" = "" ]; then
 			elementToCopyHasChanged=0
@@ -124,10 +124,10 @@ function copyFiles()
 		elementToCopy=$(echo "$line" | sed 's|^[^ ]* [^/]*||')
 		line=$(echo "$line" | sed 's/|//')
 		
-		addLog "D" "||E=$elementToCopy||"
-		addLog "D" "||L=$line||"
-		addLog "D" "||EK=$elementToCopyKey||"
-		addLog "D" "||ES=$elementToCopySize||$elementToCopyHasChanged||"
+		addLog "D" "ElementToCopy=$elementToCopy"
+		addLog "D" "Line=$line"
+		addLog "D" "ElementToCopyKey=$elementToCopyKey"
+		addLog "D" "ElementToCopySize(s)=$elementToCopySize||$elementToCopyDiskSize||$elementToCopyHasChanged"
 		
 		if [ -d "$elementToCopy" ]; then
 			if [ "$elementToCopyHasChanged" = "1" ]; then
@@ -137,59 +137,74 @@ function copyFiles()
 			echo "$line" >> "$folderDb.list"
 		else
 			ensureDiskConnected "$diskPath" "$foundDiskName"
-
 			addLog "N" "To copy : $elementToCopy"
-			leftSpace=$(getDiskFreeSpace "$diskPath")
-			addLog "D" "||LS=$leftSpace||"
-			leftSpace=$((($leftSpace << 10) - ($elementToCopySize) - ($fullRangeMin << 10)))
-			addLog "D" "||LS=$leftSpace||"
 			
-			if [ "$leftSpace" -gt 0 ]; then
-				fileName=$(echo "$elementToCopy" | awk -F "/" '{print $NF}')
-				pathEnd=$(dirname "$elementToCopy")
-				if [ "$pathEnd" = "$currentFolder" ]; then
-					pathEnd=""
-				else
-					pathEnd=$(echo "$pathEnd" | sed "s|^$currentFolder/||")
-					pathEnd="$pathEnd/"
-				fi
-				
-				mkdir -p "$diskPath/$lastDir/$pathEnd"
-				addLog "N" "Copying : $diskPath/$lastDir/$pathEnd$fileName"
-				addLog "D" "CopyingFrom=$elementToCopy"
-				addLog "D" "CopyingTo=$diskPath/$lastDir/$pathEnd$fileName"
-				addLog "D" "DiskPath=$diskPath"
-				addLog "D" "LastDir=$lastDir"
-				addLog "D" "PathEnd=$pathEnd"
-				addLog "D" "FileName=$fileName"
-				
-				toFile="$diskPath/$lastDir/$pathEnd$fileName"
-				if [ -f "$diskPath/$lastDir/$pathEnd$fileName" ]; then
-					rsync -a --no-compress "$elementToCopy" "$toFile"
-				else
-					cp -a "$elementToCopy" "$toFile"
-				fi
-				if [ "$?" -eq "0" ]; then
-					if [ "$elementToCopyHasChanged" = "1" ]; then
-						sed "\|^$elementToCopyKey |d" "$folderDb.list" > "$folderDb.list2"
-						cp "$folderDb.list2" "$folderDb.list"
-					fi
-					echo "$line" >> "$folderDb.list"
-				else
-					rm "$toFile"
-					echo "Error - copy/rsync exit code: $?" >&2
-				fi
+			# Set path of "copying to" file
+			fileName=$(echo "$elementToCopy" | awk -F "/" '{print $NF}')
+			pathEnd=$(dirname "$elementToCopy")
+			if [ "$pathEnd" = "$currentFolder" ]; then
+				pathEnd=""
 			else
-				break
+				pathEnd=$(echo "$pathEnd" | sed "s|^$currentFolder/||")
+				pathEnd="$pathEnd/"
+			fi
+			mkdir -p "$diskPath/$lastDir/$pathEnd"
+			
+			toFile="$diskPath/$lastDir/$pathEnd$fileName"
+			toFileSize=$(stat -c %s "$toFile" 2>/dev/null)
+			toFileSizeAdjusted=0
+			if [ "$toFileSize" != "" ]; then
+				toFileDiskSize=$(du "$toFile" | awk '{print $1}')
+			fi
+			
+			# Get space left on USB disk
+			leftSpace=$(getDiskFreeSpace "$diskPath")
+			addLog "D" "LeftSpace=$leftSpace"
+			leftSpace=$((($leftSpace << 10) - ($elementToCopyDiskSize) - ($fullRangeMin << 10) + ($toFileDiskSize)))
+			addLog "D" "LeftSpaceAdjusted=$leftSpace"
+			
+			# Echo debug informations
+			addLog "D" "CopyingFrom=$elementToCopy"
+			addLog "D" "CopyingTo=$diskPath/$lastDir/$pathEnd$fileName"
+			addLog "D" "DiskPath=$diskPath"
+			addLog "D" "LastDir=$lastDir"
+			addLog "D" "PathEnd=$pathEnd"
+			addLog "D" "FileName=$fileName"
+			addLog "D" "ToFileSize=$toFileSize"
+			
+			# Rsync / copy file
+			if ([ "$toFileSize" = "$elementToCopySize" ] && [ "$leftSpace" -le 0 ]) || ([ -f "$toFile" ] && [ "$leftSpace" -gt 0 ]); then
+				# if same file size and no more space, try rsynch to ensure same file so it will be added to the "list" file
+				# or if still free space for the file and the file already exists
+				addLog "N" "Synchronizing : $diskPath/$lastDir/$pathEnd$fileName"
+				rsync -a --no-compress "$elementToCopy" "$toFile"
+			elif [ "$leftSpace" -gt 0 ]; then
+				# if file doesn't exist and still free space for the file
+				addLog "N" "Copying : $diskPath/$lastDir/$pathEnd$fileName"
+				cp -a "$elementToCopy" "$toFile"
+			else
+				# if file exists, not the same size and missing space to rsync it
+				addLog "N" "Removing due to file change, but missing space on USB disk : $diskPath/$lastDir/$pathEnd$fileName"
+				triedToCopy=0
+				rm "$toFile"
+			fi
+			
+			# If tried to rsync/copy the file, then upon success or failure act accordingly
+			if [ $triedToCopy -eq 1 ] && [ "$?" -eq "0" ]; then
+				if [ "$elementToCopyHasChanged" = "1" ]; then
+					# Remove current entry in the list file because of some changes (size, date)
+					sed "\|^$elementToCopyKey |d" "$folderDb.list" > "$folderDb.list2"
+					# Add rsync/copy file to the list file
+					cp "$folderDb.list2" "$folderDb.list"
+				fi
+				echo "$line" >> "$folderDb.list"
+			elif [ $triedToCopy -eq 1 ]; then
+				# Remove the copied file upon failure
+				rm "$toFile"
+				echo "Error - copy/rsync exit code: $?" >&2
 			fi
 		fi
 	done < "$folderDb.tocopy"
-	
-	if [ ! "$leftSpace" -gt 0 ]; then
-		continueNextFolder=1
-	fi
-	
-	continueNextFolder=0
 }
 
 
@@ -271,7 +286,6 @@ function ensureDiskConnected()
 	local mountExists=$(mount -l | grep $diskPath)
 	local writePossible=$(echo "Y" > "$testingFile" && echo "1")
 	
-	###TODO: Shall not exit but return 1 if failing and 0 if success and the callee shall stop what it is doing to be able to send an error email
 	if [ "$mountExists" = "" ] || [ "$writePossible" = "" ]; then
 		echo "Disk $diskName disconnected or impossible to write a test file" >&2
 		exit
