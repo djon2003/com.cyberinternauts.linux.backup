@@ -91,19 +91,24 @@ function copyFiles()
 # $3 = diskPath
 # $4 = foundDiskName
 # $5 = fullRangeMin
+# $6 = baseDir
 {
 	local currentFolder="$1"
 	local folderDb="$2"
 	local diskPath="$3"
 	local foundDiskName="$4"
 	local fullRangeMin="$5"
+	local baseDir="$6"
 
 	## For each elements to copy
 	## - Ensure not a folder
 	## - Check if enough space to copy on disk and would still be over FULL-RANGE-MIN after copy
 	## - Copy on disk
 	## - Add to the .list
-	local lastDir=$(echo "$currentFolder" | awk -F "/" '{print $NF}')
+	local baseDirLength=$(echo "$baseDir" | wc -c)
+	baseDirLength=$(($baseDirLength + 1))
+	local lastDir=$(echo "$currentFolder" | cut -c $baseDirLength-)
+	
 	local elementToCopyKey elementToCopyDiskSize elementToCopyHasChanged elementToCopy
 	local line leftSpace=0 fileName pathEnd toFile toFileSize toFileDiskSize triedToCopy=1
 	while IFS='' read -r line || [[ -n "$line" ]]; do
@@ -167,6 +172,7 @@ function copyFiles()
 			addLog "D" "CopyingFrom=$elementToCopy"
 			addLog "D" "CopyingTo=$diskPath/$lastDir/$pathEnd$fileName"
 			addLog "D" "DiskPath=$diskPath"
+			addLog "D" "CurrentFolder=$currentFolder"
 			addLog "D" "LastDir=$lastDir"
 			addLog "D" "PathEnd=$pathEnd"
 			addLog "D" "FileName=$fileName"

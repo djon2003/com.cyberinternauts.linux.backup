@@ -287,7 +287,7 @@ for iK in ${!folders[@]}; do
 		
 	prepareDatabase "$lsMethod" "$currentFolder" "$folderDb" "$exclusionFilter"
 
-	copyFiles "$currentFolder" "$folderDb" "$diskPath" "$foundDiskName" "$fullRangeMin"
+	copyFiles "$currentFolder" "$folderDb" "$diskPath" "$foundDiskName" "$fullRangeMin" "$baseDir"
 done
 
 
