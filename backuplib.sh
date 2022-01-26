@@ -152,7 +152,7 @@ function copyFiles()
 			
 			toFile="$diskPath/$lastDir/$pathEnd$fileName"
 			toFileSize=$(stat -c %s "$toFile" 2>/dev/null)
-			toFileSizeAdjusted=0
+			toFileDiskSize=0
 			if [ "$toFileSize" != "" ]; then
 				toFileDiskSize=$(du "$toFile" | awk '{print $1}')
 			fi
