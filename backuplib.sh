@@ -6,12 +6,35 @@ function prepareDatabase()
 # $2 = currentFolder\
 # $3 = folderDb
 # $4 = exclusionFilter
+# $5 = diskPath
+# $6 = baseDir
 {
+	addLog "D" "-->function prepareDatabase"
 	# Parameters
 	local lsMethod="$1"
 	local currentFolder="$2"
 	local folderDb="$3"
 	local exclusionFilter="$4"
+	local diskPath="$5"
+	local baseDir="$6"
+	
+	local lastDir=$(cutPath1FromPath2 "$baseDir" "$currentFolder")
+	
+	addLog "D" "BaseDir=$baseDir"
+	addLog "D" "CurrentFolder=$currentFolder"
+	addLog "D" "LastDir=$lastDir"
+	addLog "D" "DiskPath=$diskPath"
+	
+	## List existing USB disk files of current folder
+	touch "$folderDb.usb-fetch-1"
+	if [ -d "$diskPath/$lastDir" ]; then
+		if [ $lsMethod -eq 1 ]; then
+			executeAndFilterErrors "${errorsToFilter[@]}" "ls -lLAesR \"$diskPath/$lastDir\" >\"$folderDb.usb-fetch-1\""
+		else
+			# Columns of "ls" shall be SizeInBlock Rights User Group Size MonthAsThreeLetters DayOfMonth Time(HH:mm:ss) Year FileName
+			executeAndFilterErrors "${errorsToFilter[@]}" "ls -lLAsR --time-style=\"+%b %d %H:%M:%S %Y\" \"$diskPath/$lastDir\" >\"$folderDb.usb-fetch-1\""
+		fi
+	fi
 
 	## List files/subfolders to backup
 	local errorsToFilter=("${exclusions[@]}")
@@ -30,11 +53,18 @@ function prepareDatabase()
 	## Rearrange file output to have a usable one
 	if [ $lsMethod -eq 1 ]; then
 		cat "$folderDb.fetch-2" | awk '/:$/&&f{s=$0;f=0}/:$/&&!f{sub(/:$/,"");s=$0;f=1;next}NF&&f{ sd=$1; sr=$6; dd=$8" "$9" "$10" "$11; gsub(/^ *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* /,"");mm=$0; ff=s"/"mm; $0=ff; gsub(" ","_"); print $0" "sd" "sr" "dd" "ff}' > "$folderDb.fetch-3"
+		cat "$folderDb.usb-fetch-1" | awk '/:$/&&f{s=$0;f=0}/:$/&&!f{sub(/:$/,"");s=$0;f=1;next}NF&&f{ sd=$1; sr=$6; dd=$8" "$9" "$10" "$11; gsub(/^ *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* /,"");mm=$0; ff=s"/"mm; $0=ff; gsub(" ","_"); print $0" "sd" "sr" "dd" "ff}' > "$folderDb.usb-fetch-2"
 	else
 		# Columns of "ls" shall be SizeInBlock Rights User Group Size MonthAsThreeLetters DayOfMonth Time(HH:mm:ss) Year FileName
 		cat "$folderDb.fetch-2" | sed '/^total/ d' | awk '/:$/&&f{s=$0;f=0}/:$/&&!f{sub(/:$/,"");s=$0;f=1;next}NF&&f{ sd=$1; sr=$6; dd=$7" "$8" "$9" "$10; gsub(/^ *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* /,"");mm=$0; ff=s"/"mm; $0=ff; gsub(" ","_"); print $0" "sd" "sr" "dd" "ff}' > "$folderDb.fetch-3"
+		cat "$folderDb.usb-fetch-1" | sed '/^total/ d' | awk '/:$/&&f{s=$0;f=0}/:$/&&!f{sub(/:$/,"");s=$0;f=1;next}NF&&f{ sd=$1; sr=$6; dd=$7" "$8" "$9" "$10; gsub(/^ *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* /,"");mm=$0; ff=s"/"mm; $0=ff; gsub(" ","_"); print $0" "sd" "sr" "dd" "ff}' > "$folderDb.usb-fetch-2"
 	fi
-
+	
+	## Replace $diskPath by $currentFolder in "usb-fetch-2" file
+	local diskPathAdjusted=$(echo "$diskPath" | sed "s/ /_/g")
+	local baseDirAdjusted=$(echo "$baseDir" | sed "s/ /_/g")
+	cat "$folderDb.usb-fetch-2" | sed "s|^$diskPathAdjusted|$baseDirAdjusted|" | sed -E "s|([^ ]+)([^/]+)$diskPath|\1\2$baseDir|" > "$folderDb.usb-size"
+	
 	## Remove not desired folders
 	if [ ! "$exclusionFilter" = "" ]; then
 		addLog "N" "Using filter: $exclusionFilter"
@@ -47,6 +77,7 @@ function prepareDatabase()
 	
 	## Prepare DB files for comparison
 	sort "$folderDb.size" > "$folderDb.size-s"
+	sort "$folderDb.usb-size" > "$folderDb.usb-size-s"
 
 	if [ ! -f "$folderDb.list" ]; then
 		touch "$folderDb.list"
@@ -59,9 +90,9 @@ function prepareDatabase()
 	fi
 
 	## Compare new and old lists (new files are considered only the second time the script is executed in case the file is currently beeing downloaded)
-	#Get changes between .size-old-s & .size-s
+	# Get changes between .size-old-s & .size-s
 	diff "$folderDb.size-s" "$folderDb.size-old-s" | grep "<" | sed 's/^< *//' > "$folderDb.size-diff"
-	#Keep only the ones from .list
+	# Keep only the ones from .list
 	awk 'FNR==NR {a[$1]=$0; gsub(" "$4" ", " |"$4" "); b[$1] = $0; next}; $0 != a[$1] && $1 in a {print b[$1]}' "$folderDb.size-diff" "$folderDb.list-s" | sed '/^$/d' > "$folderDb.size-diff-diff"
 
 	# Get no changes between .size-old-s & .size-s (files completed)
@@ -82,7 +113,46 @@ function prepareDatabase()
 	# Copy .size-s over .size-old-s
 	cp "$folderDb.size-s" "$folderDb.size-old-s"
 	
+	## List deleted files
+	diff "$folderDb.usb-size-s" "$folderDb.size-s" | grep "<" | sed 's/^< *//' | sed "s|^$baseDirAdjusted|$diskPathAdjusted|" | sed -E "s|([^ ]+)([^/]+)$baseDir|\1\2$diskPath|" > "$folderDb.todelete"
+	
 	addLog "N" "Files comparison done"
+	addLog "D" "<--function prepareDatabase"
+}
+
+function deleteFiles()
+# $1 = baseDir
+# $2 = folderDb
+# $3 = diskPath
+# $4 = foundDiskName
+{
+	addLog "D" "-->function deleteFiles"
+
+	# Parameters
+	local baseDir="$1"
+	local folderDb="$2"
+	local diskPath="$3"
+	local foundDiskName="$4"
+	
+	## Loop through files to delete and ensure it doesn't exist anymore in backup folder (and if so, delete the file on USB disk)
+	local line elementToDelete toEnsure
+	while IFS='' read -r line || [[ -n "$line" ]]; do
+		elementToDelete=$(echo "$line" | sed 's|^[^ ]* [^/]*||')
+		toEnsure=$(echo "$elementToDelete" | sed "s|^$diskPath|$baseDir|")
+		toDisplay=$(echo "$toEnsure" | sed "s|^$baseDir||")
+		
+		addLog "D" "Line=$line"
+		addLog "D" "ElementToDelete=$elementToDelete"
+		addLog "D" "ToEnsure=$toEnsure"
+				
+		if [ ! -f "$toEnsure" ] && [ ! -d "$toEnsure" ] && ([ -f "$elementToDelete" ] || [ -d "$elementToDelete" ]) ; then
+			addLog "N" "Deleting on disk \"$foundDiskName\" : $toDisplay"
+			
+			rm -rf "$elementToDelete"
+		fi
+	done < "$folderDb.todelete"
+	
+	addLog "D" "<--function deleteFiles"
 }
 
 function copyFiles()
@@ -93,6 +163,8 @@ function copyFiles()
 # $5 = fullRangeMin
 # $6 = baseDir
 {
+	addLog "D" "-->function copyFiles"
+	# Parameters
 	local currentFolder="$1"
 	local folderDb="$2"
 	local diskPath="$3"
@@ -105,9 +177,7 @@ function copyFiles()
 	## - Check if enough space to copy on disk and would still be over FULL-RANGE-MIN after copy
 	## - Copy on disk
 	## - Add to the .list
-	local baseDirLength=$(echo "$baseDir" | wc -c)
-	baseDirLength=$(($baseDirLength + 1))
-	local lastDir=$(echo "$currentFolder" | cut -c $baseDirLength-)
+	local lastDir=$(cutPath1FromPath2 "$baseDir" "$currentFolder")
 	
 	local elementToCopyKey elementToCopyDiskSize elementToCopyHasChanged elementToCopy
 	local line leftSpace=0 fileName pathEnd toFile toFileSize toFileDiskSize triedToCopy=1
@@ -211,8 +281,22 @@ function copyFiles()
 			fi
 		fi
 	done < "$folderDb.tocopy"
+	
+	addLog "D" "<--function copyFiles"
 }
 
+function cutPath1FromPath2()
+# $1 = path1
+# $2 = path2
+{
+	local path1="$1"
+	local path2="$2"
+	
+	local dir1Length=$(echo "$path1" | wc -c)
+	dir1Length=$(($dir1Length + 1))
+	local cutPath=$(echo "$path2" | cut -c $dir1Length-)
+	echo $cutPath
+}
 
 function ensureDisk()
 # Try to find one and only one USB disk connected starting with $1

@@ -274,7 +274,11 @@ lsMethod=2
 ls -lLAesR 2>/dev/null
 if [ $? -eq 0 ]; then lsMethod=1; fi
 
-initialDir=$(pwd)
+## Set REMOVE-FILES
+removeFiles=$(getParamValue "REMOVE-FILES" "N")
+if [ "$removeFiles" != "Y" ]; then
+	removeFiles="N"
+fi
 
 ## Loop through folders to backup
 for iK in ${!folders[@]}; do
@@ -285,7 +289,11 @@ for iK in ${!folders[@]}; do
 	folderDb=$(echo "$currentFolder" | tr / .)
 	folderDb="$dbDir/$wantDiskName$folderDb"
 		
-	prepareDatabase "$lsMethod" "$currentFolder" "$folderDb" "$exclusionFilter"
+	prepareDatabase "$lsMethod" "$currentFolder" "$folderDb" "$exclusionFilter" "$diskPath" "$baseDir"
+
+	if [ "$removeFiles" = "Y" ]; then
+		deleteFiles "$baseDir" "$folderDb" "$diskPath" "$foundDiskName"
+	fi
 
 	copyFiles "$currentFolder" "$folderDb" "$diskPath" "$foundDiskName" "$fullRangeMin" "$baseDir"
 done
