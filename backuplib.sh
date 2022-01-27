@@ -125,6 +125,7 @@ function deleteFiles()
 # $2 = folderDb
 # $3 = diskPath
 # $4 = foundDiskName
+# $5 = globalList list file that contains all folders
 {
 	addLog "D" "-->function deleteFiles"
 
@@ -133,6 +134,7 @@ function deleteFiles()
 	local folderDb="$2"
 	local diskPath="$3"
 	local foundDiskName="$4"
+	local globalList="$5"
 		
 	## Loop through files to delete and ensure it doesn't exist anymore in backup folder (and if so, delete the file on USB disk)
 	local line elementToDelete toEnsure elementToDeleteKey
@@ -157,15 +159,10 @@ function deleteFiles()
 			# Remove entry from list file. It is done appart the first IF because if a folder is deleted, then the files underneath wouldn't be removed from the list file.
 			addLog "D" "Removed from list file"
 			
-			sed "/^$elementToDeleteKey /d" "$folderDb.list" > "$folderDb.list-d"
+			sed -i "/^$elementToDeleteKey /d" "$folderDb.list"
+			sed -i "/^$foundDiskName:$elementToDeleteKey /d" "$globalList"
 		fi
 	done < "$folderDb.todelete"
-	
-	## Take new list file that has been removed the deleted files
-	if [ -f "$folderDb.list-d" ]; then
-		rm "$folderDb.list"
-		mv "$folderDb.list-d" "$folderDb.list"
-	fi
 	
 	addLog "D" "<--function deleteFiles"
 }
@@ -177,6 +174,7 @@ function copyFiles()
 # $4 = foundDiskName
 # $5 = fullRangeMin
 # $6 = baseDir
+# $7 = globalList list file that contains all folders
 {
 	addLog "D" "-->function copyFiles"
 	# Parameters
@@ -186,6 +184,7 @@ function copyFiles()
 	local foundDiskName="$4"
 	local fullRangeMin="$5"
 	local baseDir="$6"
+	local globalList="$7"
 
 	## For each elements to copy
 	## - Ensure not a folder
@@ -221,10 +220,11 @@ function copyFiles()
 		
 		if [ -d "$elementToCopy" ]; then
 			if [ "$elementToCopyHasChanged" = "1" ]; then
-				sed "\|^$elementToCopyKey |d" "$folderDb.list" > "$folderDb.list2"
-				cp "$folderDb.list2" "$folderDb.list"
+				sed -i "\|^$elementToCopyKey |d" "$folderDb.list"
+				sed -i "\|^$foundDiskName:$elementToCopyKey |d" "$globalList"
 			fi
 			echo "$line" >> "$folderDb.list"
+			echo "$foundDiskName:$line" >> "$globalList"
 		else
 			ensureDiskConnected "$diskPath" "$foundDiskName"
 			addLog "N" "To copy : $elementToCopy"
@@ -289,6 +289,7 @@ function copyFiles()
 					cp "$folderDb.list2" "$folderDb.list"
 				fi
 				echo "$line" >> "$folderDb.list"
+				echo "$foundDiskName:$line" >> "$globalList"
 			elif [ $triedToCopy -eq 1 ]; then
 				# Remove the copied file upon failure
 				rm "$toFile"

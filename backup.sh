@@ -62,6 +62,7 @@ function sendMail()
 # $1 = is this an error (Value "Y" means yes, all others mean no)
 # $2 = email object
 # $3 = email content
+# $4 = attachmentFile
 {
 	local isError=$1
 	if [ "$isError" != "Y" ]; then
@@ -70,6 +71,7 @@ function sendMail()
 	fi
 	local emailObject=$2
 	local emailContent=$3
+	local attachmentFile=$4
 	local email=$(getParamValue "EMAIL")
 	local errorEmail=$(getParamValue "ERROR-EMAIL" "$email")
 	
@@ -81,7 +83,7 @@ function sendMail()
 		return
 	fi
 	
-	__sendMail "$emailObject" "$email" "$email" "$emailContent"
+	__sendMail "$emailObject" "$email" "$email" "$emailContent" "$attachmentFile"
 }
 
 function sendErrorMailOnExit()
@@ -252,6 +254,7 @@ fi
 
 ## Ensure USB disk is connected and OK
 wantDiskName=$(getParamValue "DISK")
+globalList="$dbDir/$wantDiskName..list"
 ensureDisk "$wantDiskName" "$dbDir"
 
 ## Set FULL-RANGE-MAX and FULL-RANGE-MIN
@@ -288,14 +291,14 @@ for iK in ${!folders[@]}; do
 	addLog "N" "Folder $currentFolder"
 	folderDb=$(echo "$currentFolder" | tr / .)
 	folderDb="$dbDir/$wantDiskName$folderDb"
-		
+	
 	prepareDatabase "$lsMethod" "$currentFolder" "$folderDb" "$exclusionFilter" "$diskPath" "$baseDir"
 
 	if [ "$removeFiles" = "Y" ]; then
-		deleteFiles "$baseDir" "$folderDb" "$diskPath" "$foundDiskName"
+		deleteFiles "$baseDir" "$folderDb" "$diskPath" "$foundDiskName" "$globalList"
 	fi
 
-	copyFiles "$currentFolder" "$folderDb" "$diskPath" "$foundDiskName" "$fullRangeMin" "$baseDir"
+	copyFiles "$currentFolder" "$folderDb" "$diskPath" "$foundDiskName" "$fullRangeMin" "$baseDir" "$globalList"
 done
 
 
@@ -306,9 +309,16 @@ if [ ! $freeSpace -gt $fullRangeMax ]; then
 	if [ "$shallCopyDB" = "Y" ]; then
 		cp -a "$dbDir" "$dbDir.save.$foundDiskName"
 	fi
-
+	
+	attachList=$(getParamValue "ATTACH-LIST-ON-DISK-FULL" "Y")
+	if [ "$attachList" != "Y" ]; then
+		globalList=""
+	fi
+	addLog "D" "AttachList=$attachList"
+	addLog "D" "GlobalList=$globalList"
+	
 	addLog "N" "Space minimum reached"
-	sendMail "N" "QNAP - External disk full" "Disk $foundDiskName is full. Please remove this one and connect another one with a name starting with $wantDiskName"
+	sendMail "N" "QNAP - External disk full" "Disk $foundDiskName is full. Please remove this one and connect another one with a name starting with $wantDiskName" "$globalList"
 	exit
 fi
 
