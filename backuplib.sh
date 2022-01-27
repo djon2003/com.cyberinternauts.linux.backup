@@ -114,7 +114,7 @@ function prepareDatabase()
 	cp "$folderDb.size-s" "$folderDb.size-old-s"
 	
 	## List deleted files
-	diff "$folderDb.usb-size-s" "$folderDb.size-s" | grep "<" | sed 's/^< *//' | sed "s|^$baseDirAdjusted|$diskPathAdjusted|" | sed -E "s|([^ ]+)([^/]+)$baseDir|\1\2$diskPath|" > "$folderDb.todelete"
+	diff "$folderDb.usb-size-s" "$folderDb.size-s" | grep "<" | sed 's/^< *//' > "$folderDb.todelete"
 	
 	addLog "N" "Files comparison done"
 	addLog "D" "<--function prepareDatabase"
@@ -133,24 +133,39 @@ function deleteFiles()
 	local folderDb="$2"
 	local diskPath="$3"
 	local foundDiskName="$4"
-	
+		
 	## Loop through files to delete and ensure it doesn't exist anymore in backup folder (and if so, delete the file on USB disk)
-	local line elementToDelete toEnsure
+	local line elementToDelete toEnsure elementToDeleteKey
 	while IFS='' read -r line || [[ -n "$line" ]]; do
-		elementToDelete=$(echo "$line" | sed 's|^[^ ]* [^/]*||')
-		toEnsure=$(echo "$elementToDelete" | sed "s|^$diskPath|$baseDir|")
+		toEnsure=$(echo "$line" | sed 's|^[^ ]* [^/]*||')
+		elementToDelete=$(echo "$toEnsure" | sed "s|^$baseDir|$diskPath|")
 		toDisplay=$(echo "$toEnsure" | sed "s|^$baseDir||")
+		elementToDeleteKey=$(escapeForRegEx $(echo "$line" | awk '{print $1}'))
 		
 		addLog "D" "Line=$line"
 		addLog "D" "ElementToDelete=$elementToDelete"
 		addLog "D" "ToEnsure=$toEnsure"
+		addLog "D" "ElementToDeleteKey=||$elementToDeleteKey||"
 				
 		if [ ! -f "$toEnsure" ] && [ ! -d "$toEnsure" ] && ([ -f "$elementToDelete" ] || [ -d "$elementToDelete" ]) ; then
+			# Delete file or folder from USB disk
 			addLog "N" "Deleting on disk \"$foundDiskName\" : $toDisplay"
 			
 			rm -rf "$elementToDelete"
 		fi
+		if [ ! -f "$toEnsure" ] && [ ! -d "$toEnsure" ]; then
+			# Remove entry from list file. It is done appart the first IF because if a folder is deleted, then the files underneath wouldn't be removed from the list file.
+			addLog "D" "Removed from list file"
+			
+			sed "/^$elementToDeleteKey /d" "$folderDb.list" > "$folderDb.list-d"
+		fi
 	done < "$folderDb.todelete"
+	
+	## Take new list file that has been removed the deleted files
+	if [ -f "$folderDb.list-d" ]; then
+		rm "$folderDb.list"
+		mv "$folderDb.list-d" "$folderDb.list"
+	fi
 	
 	addLog "D" "<--function deleteFiles"
 }
