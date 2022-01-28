@@ -273,7 +273,7 @@ function copyFiles()
 				# if file doesn't exist and still free space for the file
 				addLog "N" "Copying : $diskPath/$lastDir/$pathEnd$fileName"
 				cp -a "$elementToCopy" "$toFile"
-			else
+			elif [ -f "$toFile" ]
 				# if file exists, not the same size and missing space to rsync it
 				addLog "N" "Removing due to file change, but missing space on USB disk : $diskPath/$lastDir/$pathEnd$fileName"
 				triedToCopy=0
