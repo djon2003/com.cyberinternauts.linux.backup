@@ -304,6 +304,14 @@ if [ ! $freeSpace -gt $fullRangeMax ]; then
 	attachList=$(getParamValue "ATTACH-LIST-ON-DISK-FULL" "Y")
 	if [ "$attachList" != "Y" ]; then
 		globalList=""
+	else
+		(
+			cd $(dirname "$globalList")
+			globalList=$(basename "$globalList")
+			rm "$globalList.zip" 2>/dev/null
+			zip "$globalList.zip" "$globalList"
+		)
+		globalList="$globalList.zip"
 	fi
 	addLog "D" "AttachList=$attachList"
 	addLog "D" "GlobalList=$globalList"
