@@ -263,15 +263,6 @@ IFS=$'-' read -r -a fullRange <<< "$fullRangeVal"
 fullRangeMax=${fullRange[1]}
 fullRangeMin=${fullRange[0]}
 
-## Ensure space is enough high on disk
-freeSpace=$(getDiskFreeSpace "$diskPath")
-if [ ! $freeSpace -gt $fullRangeMin ]; then
-	addLog "N" "Space minimum reached"
-	sendMail "N" "QNAP - External disk full" "Disk $foundDiskName is full. Please remove this one and put another one with the name starting with $wantDiskName"
-	exit
-fi
-leftSpace=1 # Set it over zero because if first folder to copy only has empty folders (which are not copied), then condition at the end of the loop shall pass
-
 ## Choose LS method
 lsMethod=2
 ls -lLAesR 2>/dev/null
