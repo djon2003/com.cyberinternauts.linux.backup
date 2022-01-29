@@ -309,7 +309,7 @@ if [ ! $freeSpace -gt $fullRangeMax ]; then
 			cd $(dirname "$globalList")
 			globalList=$(basename "$globalList")
 			rm "$globalList.zip" 2>/dev/null
-			zip "$globalList.zip" "$globalList"
+			zip "$globalList.zip" "$globalList" 1>/dev/null
 		)
 		globalList="$globalList.zip"
 	fi
