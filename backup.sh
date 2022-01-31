@@ -294,7 +294,7 @@ done
 
 
 ## If disk free space under FULL-RANGE-MAX, then send email + copy DB if params say so
-freeSpace=$(getDiskFreeSpace "$diskPath")
+freeSpace=$(getDiskFreeSpace "$diskPath" "m")
 if [ ! $freeSpace -gt $fullRangeMax ]; then
 	shallCopyDB=$(getParamValue "COPY-DB-ON-DISK-FULL" "Y")
 	if [ "$shallCopyDB" = "Y" ]; then
@@ -318,7 +318,6 @@ if [ ! $freeSpace -gt $fullRangeMax ]; then
 	
 	addLog "N" "Space minimum reached"
 	sendMail "N" "QNAP - External disk full" "Disk $foundDiskName is full. Please remove this one and connect another one with a name starting with $wantDiskName" "$globalList"
-	exit
 fi
 
 addLog "N" "Backup done"

@@ -192,6 +192,7 @@ function copyFiles()
 	## - Copy on disk
 	## - Add to the .list
 	local lastDir=$(cutPath1FromPath2 "$baseDir" "$currentFolder")
+	local fullRangeMinInKB=$(($fullRangeMin << 10))
 	
 	local elementToCopyKey elementToCopyDiskSize elementToCopyHasChanged elementToCopy
 	local line leftSpace=0 fileName pathEnd toFile toFileSize toFileDiskSize triedToCopy=1
@@ -250,7 +251,9 @@ function copyFiles()
 			# Get space left on USB disk
 			leftSpace=$(getDiskFreeSpace "$diskPath")
 			addLog "D" "LeftSpace=$leftSpace"
-			leftSpace=$((($leftSpace << 10) - ($elementToCopyDiskSize) - ($fullRangeMin << 10) + ($toFileDiskSize)))
+			addLog "D" "FullRangeMin=$fullRangeMin"
+			addLog "D" "FullRangeMinInKB=$fullRangeMinInKB"
+			leftSpace=$((($leftSpace) - ($elementToCopyDiskSize) - ($fullRangeMinInKB) + ($toFileDiskSize))) # All sizes have to be in kilobytes
 			addLog "D" "LeftSpaceAdjusted=$leftSpace"
 			
 			# Echo debug informations
@@ -406,14 +409,21 @@ function ensureDiskConnected()
 }
 
 function getDiskFreeSpace()
-# $1 = disk path to get free space
+# $1 = diskPath: disk path to get free space
+# $2 = returnUnit: return size either in kilobytes (k) or in megabytes (m). Default is (k).
+# return: free space of the disk path in kilobytes or megabytes
 {
 	local diskPath="$1"
+	local returnUnit="$2"
+	
+	if [ "$returnUnit" != "m" ]; then
+		returnUnit="k"
+	fi
+	
 	local diskSpaceLine2
-	local diskSpaceLine=$(df -m $diskPath)
+	local diskSpaceLine=$(df -$returnUnit $diskPath)
 	IFS=' ' read -rd '' -a diskSpaceLine2 <<< "$diskSpaceLine"
-	local freeSpace=$((${diskSpaceLine2[7]} - ${diskSpaceLine2[8]}))
+	local freeSpace=${diskSpaceLine2[9]} # 9th position is available space
 	
 	echo $freeSpace
 }
-
