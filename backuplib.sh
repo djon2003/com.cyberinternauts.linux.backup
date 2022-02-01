@@ -220,6 +220,7 @@ function copyFiles()
 		addLog "D" "ElementToCopySize(s)=$elementToCopySize||$elementToCopyDiskSize||$elementToCopyHasChanged"
 		
 		if [ -d "$elementToCopy" ]; then
+			# If it is a folder, then only add it to the file list so it doesn't take any useless space on the backup disk
 			if [ "$elementToCopyHasChanged" = "1" ]; then
 				sed -i "\|^$elementToCopyKey |d" "$folderDb.list"
 				sed -i "\|^$foundDiskName:$elementToCopyKey |d" "$globalList"
@@ -227,6 +228,7 @@ function copyFiles()
 			echo "$line" >> "$folderDb.list"
 			echo "$foundDiskName:$line" >> "$globalList"
 		else
+			# If it is a file, then backup if needed
 			ensureDiskConnected "$diskPath" "$foundDiskName"
 			addLog "N" "To copy : $elementToCopy"
 			
@@ -239,7 +241,6 @@ function copyFiles()
 				pathEnd=$(echo "$pathEnd" | sed "s|^$currentFolder/||")
 				pathEnd="$pathEnd/"
 			fi
-			mkdir -p "$diskPath/$lastDir/$pathEnd"
 			
 			toFile="$diskPath/$lastDir/$pathEnd$fileName"
 			toFileSize=$(stat -c %s "$toFile" 2>/dev/null)
@@ -258,7 +259,7 @@ function copyFiles()
 			
 			# Echo debug informations
 			addLog "D" "CopyingFrom=$elementToCopy"
-			addLog "D" "CopyingTo=$diskPath/$lastDir/$pathEnd$fileName"
+			addLog "D" "CopyingTo=$toFile"
 			addLog "D" "DiskPath=$diskPath"
 			addLog "D" "CurrentFolder=$currentFolder"
 			addLog "D" "LastDir=$lastDir"
@@ -270,15 +271,16 @@ function copyFiles()
 			if ([ "$toFileSize" = "$elementToCopySize" ] && [ "$leftSpace" -le 0 ]) || ([ -f "$toFile" ] && [ "$leftSpace" -gt 0 ]); then
 				# if same file size and no more space, try rsynch to ensure same file so it will be added to the "list" file
 				# or if still free space for the file and the file already exists
-				addLog "N" "Synchronizing : $diskPath/$lastDir/$pathEnd$fileName"
+				addLog "N" "Synchronizing : $toFile"
 				rsync -a --no-compress "$elementToCopy" "$toFile"
 			elif [ "$leftSpace" -gt 0 ]; then
 				# if file doesn't exist and still free space for the file
-				addLog "N" "Copying : $diskPath/$lastDir/$pathEnd$fileName"
+				addLog "N" "Copying : $toFile"
+				mkdir -p "$diskPath/$lastDir/$pathEnd" # Create toFolder only if copying the file, otherwise it would fill the USB disk with empty folders
 				cp -a "$elementToCopy" "$toFile"
 			elif [ -f "$toFile" ]; then
 				# if file exists, not the same size and missing space to rsync it
-				addLog "N" "Removing due to file change, but missing space on USB disk : $diskPath/$lastDir/$pathEnd$fileName"
+				addLog "N" "Removing due to file change, but missing space on USB disk : $toFile"
 				triedToCopy=0
 				rm "$toFile"
 			fi
