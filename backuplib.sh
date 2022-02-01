@@ -175,6 +175,7 @@ function copyFiles()
 # $5 = fullRangeMin
 # $6 = baseDir
 # $7 = globalList list file that contains all folders
+# $8 = reconstructDb
 {
 	addLog "D" "-->function copyFiles"
 	# Parameters
@@ -185,6 +186,7 @@ function copyFiles()
 	local fullRangeMin="$5"
 	local baseDir="$6"
 	local globalList="$7"
+	local reconstructDb="$8"
 
 	## For each elements to copy
 	## - Ensure not a folder
@@ -249,13 +251,21 @@ function copyFiles()
 				toFileDiskSize=$(du "$toFile" | awk '{print $1}')
 			fi
 			
-			# Get space left on USB disk
+			# Get space left on USB disk and stop backup if no more space and no DB reconstruction
 			leftSpace=$(getDiskFreeSpace "$diskPath")
 			addLog "D" "LeftSpace=$leftSpace"
 			addLog "D" "FullRangeMin=$fullRangeMin"
 			addLog "D" "FullRangeMinInKB=$fullRangeMinInKB"
-			leftSpace=$((($leftSpace) - ($elementToCopyDiskSize) - ($fullRangeMinInKB) + ($toFileDiskSize))) # All sizes have to be in kilobytes
+			leftSpace=$((($leftSpace) - ($fullRangeMinInKB))) # All sizes have to be in kilobytes
 			addLog "D" "LeftSpaceAdjusted=$leftSpace"
+			
+			if [ "$reconstructDb" = "N" ] && [ "$leftSpace" -le 0 ]; then
+				addLog "D" "Stop copy because disk is full"
+				break
+			fi
+			
+			leftSpace=$((($leftSpace) - ($elementToCopyDiskSize) + ($toFileDiskSize))) # All sizes have to be in kilobytes
+			addLog "D" "LeftSpaceAdjusted2=$leftSpace"
 			
 			# Echo debug informations
 			addLog "D" "CopyingFrom=$elementToCopy"

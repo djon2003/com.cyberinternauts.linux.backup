@@ -262,6 +262,7 @@ fullRangeVal=$(getParamValue "FULL-RANGE")
 IFS=$'-' read -r -a fullRange <<< "$fullRangeVal"
 fullRangeMax=${fullRange[1]}
 fullRangeMin=${fullRange[0]}
+fullRangeMinInKB=$(($fullRangeMin << 10))
 
 ## Choose LS method
 lsMethod=2
@@ -272,6 +273,12 @@ if [ $? -eq 0 ]; then lsMethod=1; fi
 removeFiles=$(getParamValue "REMOVE-FILES" "N")
 if [ "$removeFiles" != "Y" ]; then
 	removeFiles="N"
+fi
+
+## Set RECONSTRUCT-DB
+reconstructDb=$(getParamValue "RECONSTRUCT-DB" "N")
+if [ "$reconstructDb" != "Y" ]; then
+	reconstructDb="N"
 fi
 
 ## Loop through folders to backup
@@ -288,8 +295,21 @@ for iK in ${!folders[@]}; do
 	if [ "$removeFiles" = "Y" ]; then
 		deleteFiles "$baseDir" "$folderDb" "$diskPath" "$foundDiskName" "$globalList"
 	fi
+	
+	# Get space left on USB disk and stop backup if no more space and no DB reconstruction
+	leftSpace=$(getDiskFreeSpace "$diskPath")
+	addLog "D" "LeftSpace=$leftSpace"
+	addLog "D" "FullRangeMin=$fullRangeMin"
+	addLog "D" "FullRangeMinInKB=$fullRangeMinInKB"			
+	leftSpace=$((($leftSpace) - ($fullRangeMinInKB))) # All sizes have to be in kilobytes
+	addLog "D" "LeftSpaceAdjusted=$leftSpace"
+	
+	if [ "$reconstructDb" = "N" ] && [ "$leftSpace" -le 0 ]; then
+		addLog "D" "Stop copy because disk is full"
+		break
+	fi
 
-	copyFiles "$currentFolder" "$folderDb" "$diskPath" "$foundDiskName" "$fullRangeMin" "$baseDir" "$globalList"
+	copyFiles "$currentFolder" "$folderDb" "$diskPath" "$foundDiskName" "$fullRangeMin" "$baseDir" "$globalList" "$reconstructDb"
 done
 
 
