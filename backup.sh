@@ -98,8 +98,8 @@ function sendErrorMailOnExit()
 	local isFileDescriptor4Exist=$(command 2>/dev/null >&4 && echo "Y")
 	if [ "$isFileDescriptor4Exist" = "Y" ]; then
 		local logFile=$(readlink /proc/self/fd/4 | sed s/.log$/.err/)
-		local logFileSize=$(stat -c %s "$logFile")
-		if [ $logFileSize -gt 0 ]; then
+		local logFileSize=$(stat -c %s "$logFile" 2>/dev/null)
+		if [ "$logFileSize" -gt 0 ]; then
 			addLog "N" "Sending error email"
 			local logFileName=$(basename "$logFile")
 			local logFileContent=$(cat "$logFile")
