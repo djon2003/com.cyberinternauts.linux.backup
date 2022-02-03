@@ -65,7 +65,7 @@ function sendMail()
 # $4 = attachmentFile
 {
 	local isError=$1
-	if [ "$isError" != "Y" ]; then
+	if [ "$isError" = "Y" ]; then
 		sentErrorMail="Y"
 		isError=""
 	fi
