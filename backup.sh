@@ -322,22 +322,23 @@ if [ ! $freeSpace -gt $fullRangeMax ]; then
 	fi
 	
 	attachList=$(getParamValue "ATTACH-LIST-ON-DISK-FULL" "Y")
-	if [ "$attachList" != "Y" ]; then
-		globalList=""
-	else
+	currentDiskList=""
+	if [ "$attachList" = "Y" ]; then
 		(
 			cd $(dirname "$globalList")
 			globalList=$(basename "$globalList")
-			rm "$globalList.zip" 2>/dev/null
-			zip "$globalList.zip" "$globalList" 1>/dev/null
+			awk "/^$foundDiskName:/" "$globalList" > "$globalList.$foundDiskName.txt"
+			zip "$globalList.$foundDiskName.zip" "$globalList.$foundDiskName.txt" 1>/dev/null
+			rm "$globalList.$foundDiskName.txt"
 		)
-		globalList="$globalList.zip"
+		currentDiskList="$globalList.$foundDiskName.zip"
 	fi
 	addLog "D" "AttachList=$attachList"
 	addLog "D" "GlobalList=$globalList"
 	
 	addLog "N" "Space minimum reached"
-	sendMail "N" "QNAP - External disk full" "Disk $foundDiskName is full. Please remove this one and connect another one with a name starting with $wantDiskName" "$globalList"
+	sendMail "N" "QNAP - External disk full" "Disk $foundDiskName is full. Please remove this one and connect another one with a name starting with $wantDiskName" "$currentDiskList"
+	rm "$currentDiskList" 2>/dev/null
 fi
 
 addLog "N" "Backup done"
