@@ -14,7 +14,7 @@ Using a NAS in RAID-5 or even RAID-1 (or others) can protect you against a disk 
 - Execute the script "backup.sh CONFIGURATION_FILE_PATH" twice. (Twice because the first execution list files and second compare what has changed)
 
 ## Recommended usage
-- Schedule the script to be executed each day.
+- Schedule the script to be executed twice each day (the second one being executed 30-60 minutes later).
 - Ensure to have an email address set in the configuration file.
 
 With this setup you will receive an email when the external disk is full and you need to plug another one.
