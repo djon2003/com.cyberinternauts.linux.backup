@@ -103,7 +103,7 @@ function sendErrorMailOnExit()
 			addLog "N" "Sending error email"
 			local logFileName=$(basename "$logFile")
 			local logFileContent=$(cat "$logFile")
-			sendMail "Y" "QNAP - Backup error" "Error happened on backup. See log file $logFileName\n\nLog error file content:\n$logFileContent"
+			sendMail "Y" "QNAP - Backup error" "Error happened on backup. See log file $logFileName"$'\n\nLog error file content:\n'"$logFileContent"
 		fi
 	fi
 }
@@ -205,10 +205,10 @@ for iK in ${!params_needed[@]}; do
 	done
 	
 	if [ $foundKey -eq 0 ]; then
-		confError="${confError}Key $i not found in configuration file\n"
+		confError="${confError}Key $i not found in configuration file"$'\n'
 	else
 		if [ "${params_values[$valueKey]}" = "" ]; then
-			confError="${confError}Key $i is empty in configuration file\n"
+			confError="${confError}Key $i is empty in configuration file"$'\n'
 		fi
 	fi
 done
@@ -225,7 +225,7 @@ activateLogs "$logOutput"
 ## Output configuration file errors after logs activation so it can be logged.
 if [ "$confError" != "" ]; then
 	printf "$confError" >&2
-	sendMail "Y" "Configuration file errors" "Configuration file: $1\n\n$confError"
+	sendMail "Y" "Configuration file errors" "Configuration file: $1"$'\n\n'"$confError"
 	exit
 fi
 
