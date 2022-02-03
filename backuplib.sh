@@ -197,7 +197,8 @@ function copyFiles()
 	local fullRangeMinInKB=$(($fullRangeMin << 10))
 	
 	local elementToCopyKey elementToCopyDiskSize elementToCopyHasChanged elementToCopy
-	local line leftSpace=0 fileName pathEnd toFile toFileSize toFileDiskSize triedToCopy=1
+	local line leftSpace=0 fileName pathEnd toFile toFileSize toFileDiskSize
+	local triedToCopy=1 backupResult
 	while IFS='' read -r line || [[ -n "$line" ]]; do
 		if [ "$line" = "" ]; then
 			continue
@@ -278,25 +279,29 @@ function copyFiles()
 			addLog "D" "ToFileSize=$toFileSize"
 			
 			# Rsync / copy file
+			triedToCopy=0
 			if ([ "$toFileSize" = "$elementToCopySize" ] && [ "$leftSpace" -le 0 ]) || ([ -f "$toFile" ] && [ "$leftSpace" -gt 0 ]); then
 				# if same file size and no more space, try rsynch to ensure same file so it will be added to the "list" file
 				# or if still free space for the file and the file already exists
+				triedToCopy=1
 				addLog "N" "Synchronizing : $toFile"
 				rsync -a --no-compress "$elementToCopy" "$toFile"
+				backupResult="$?"
 			elif [ "$leftSpace" -gt 0 ]; then
 				# if file doesn't exist and still free space for the file
+				triedToCopy=1
 				addLog "N" "Copying : $toFile"
 				mkdir -p "$diskPath/$lastDir/$pathEnd" # Create toFolder only if copying the file, otherwise it would fill the USB disk with empty folders
 				cp -a "$elementToCopy" "$toFile"
+				backupResult="$?"
 			elif [ -f "$toFile" ]; then
 				# if file exists, not the same size and missing space to rsync it
 				addLog "N" "Removing due to file change, but missing space on USB disk : $toFile"
-				triedToCopy=0
 				rm "$toFile"
 			fi
 			
 			# If tried to rsync/copy the file, then upon success or failure act accordingly
-			if [ $triedToCopy -eq 1 ] && [ "$?" -eq "0" ]; then
+			if [ $triedToCopy -eq 1 ] && [ "$backupResult" -eq "0" ]; then
 				if [ "$elementToCopyHasChanged" = "1" ]; then
 					# Remove current entry in the list file because of some changes (size, date)
 					sed "\|^$elementToCopyKey |d" "$folderDb.list" > "$folderDb.list2"
