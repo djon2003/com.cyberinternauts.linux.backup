@@ -324,7 +324,7 @@ if [ ! $freeSpace -gt $fullRangeMax ]; then
 	
 	attachList=$(getParamValue "ATTACH-LIST-ON-DISK-FULL" "Y")
 	currentDiskList=""
-	if [ "$attachList" = "Y" ]; then
+	if [ "$attachList" = "Y" ] && [ -f "$globalList" ]; then
 		(
 			cd $(dirname "$globalList")
 			globalList=$(basename "$globalList")
