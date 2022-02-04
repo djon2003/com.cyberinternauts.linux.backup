@@ -67,6 +67,7 @@ function sendMail()
 	local isError=$1
 	if [ "$isError" = "Y" ]; then
 		sentErrorMail="Y"
+	else
 		isError=""
 	fi
 	local emailObject=$2
