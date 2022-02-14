@@ -61,16 +61,44 @@ function prepareDatabase()
 	fi
 	
 	## Replace $diskPath by $currentFolder in "usb-fetch-2" file
-	local diskPathAdjusted=$(echo "$diskPath" | sed "s/ /_/g")
-	local baseDirAdjusted=$(echo "$baseDir" | sed "s/ /_/g")
-	cat "$folderDb.usb-fetch-2" | sed "s|^$diskPathAdjusted|$baseDirAdjusted|" | sed -E "s|([^ ]+)([^/]+)$diskPath|\1\2$baseDir|" > "$folderDb.usb-size"
+	cat "$folderDb.usb-fetch-2" | sed -E "s|([^ ]+)([^/]+)$diskPath|\1\2$baseDir|" > "$folderDb.usb-fetch-3"
+	
+	## Replace entry key by sha1 of file path
+	# Ref: https://stackoverflow.com/a/27931082/214898
+	awk '{
+		metaInfoLength=0
+		for (i=1; i<=7; i++)
+		{
+			metaInfoLength += length($i) + 1;
+		}
+		curFile=substr($0,metaInfoLength + 1);
+		command = ("echo '\''" curFile "'\'' | sha1sum -b | cut -d\\  -f 1");
+		command | getline hash;
+		close(command);
+		$1 = "/" hash;
+		print $0;
+		}' "$folderDb.fetch-3" > "$folderDb.fetch-4"
+		
+	awk '{
+		metaInfoLength=0
+		for (i=1; i<=7; i++)
+		{
+			metaInfoLength += length($i) + 1;
+		}
+		curFile=substr($0,metaInfoLength + 1);
+		command = ("echo '\''" curFile "'\'' | sha1sum -b | cut -d\\  -f 1");
+		command | getline hash;
+		close(command);
+		$1 = "/" hash;
+		print $0;
+		}' "$folderDb.usb-fetch-3" > "$folderDb.usb-size"
 	
 	## Remove not desired folders
 	if [ ! "$exclusionFilter" = "" ]; then
 		addLog "N" "Using filter: $exclusionFilter"
-		cat "$folderDb.fetch-3" | sed -E "s/^.*$exclusionFilter.*$//" | sed '/^$/d' > "$folderDb.size"
+		cat "$folderDb.fetch-4" | sed -E "s/^.*$exclusionFilter.*$//" | sed '/^$/d' > "$folderDb.size"
 	else
-		cp "$folderDb.fetch-3" "$folderDb.size"
+		cp "$folderDb.fetch-4" "$folderDb.size"
 	fi
 	
 	addLog "N" "Rearranging done"
@@ -88,7 +116,7 @@ function prepareDatabase()
 	# Get differences between size-s and list-s
 	diff -u "$folderDb.size-s" "$folderDb.list-s" > "$folderDb.size-diff"
 
-	# Keep the ones that differ from .list (files not copied)
+	# Keep the ones that differ from .list (files not copied & modified ones)
 	awk '{
 		if (FNR == NR) 
 		{
