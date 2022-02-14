@@ -262,6 +262,7 @@ ensureDisk "$wantDiskName" "$dbDir"
 fullRangeVal=$(getParamValue "FULL-RANGE")
 IFS=$'-' read -r -a fullRange <<< "$fullRangeVal"
 fullRangeMax=${fullRange[1]}
+fullRangeMaxInKB=$(($fullRangeMax << 10))
 fullRangeMin=${fullRange[0]}
 fullRangeMinInKB=$(($fullRangeMin << 10))
 
@@ -282,6 +283,17 @@ if [ "$reconstructDb" != "Y" ]; then
 	reconstructDb="N"
 fi
 
+## Set DELETE-EMPTY-FOLDERS
+deleteEmptyFolders=$(getParamValue "DELETE-EMPTY-FOLDERS" "N")
+if [ "$deleteEmptyFolders" != "Y" ]; then
+	deleteEmptyFolders="N"
+fi
+
+## Ensure global list file exists
+if [ ! -f "$globalList" ]; then
+	touch "$globalList"
+fi
+
 ## Loop through folders to backup
 for iK in ${!folders[@]}; do
 	ensureDiskConnected "$diskPath" "$foundDiskName"
@@ -293,24 +305,24 @@ for iK in ${!folders[@]}; do
 	
 	prepareDatabase "$lsMethod" "$currentFolder" "$folderDb" "$exclusionFilter" "$diskPath" "$baseDir"
 
-	if [ "$removeFiles" = "Y" ]; then
-		deleteFiles "$baseDir" "$folderDb" "$diskPath" "$foundDiskName" "$globalList"
+	if [ "$removeFiles" = "Y" ] || [ "$reconstructDb" = "Y" ]; then
+		verifyFiles "$baseDir" "$folderDb" "$diskPath" "$foundDiskName" "$globalList" "$removeFiles" "$reconstructDb"
 	fi
+
+	copyFiles "$currentFolder" "$folderDb" "$diskPath" "$foundDiskName" "$fullRangeMin" "$baseDir" "$globalList" "$fullRangeMax"
 	
 	# Get space left on USB disk and stop backup if no more space and no DB reconstruction
 	leftSpace=$(getDiskFreeSpace "$diskPath")
 	addLog "D" "LeftSpace=$leftSpace"
 	addLog "D" "FullRangeMin=$fullRangeMin"
-	addLog "D" "FullRangeMinInKB=$fullRangeMinInKB"			
-	leftSpace=$((($leftSpace) - ($fullRangeMinInKB))) # All sizes have to be in kilobytes
-	addLog "D" "LeftSpaceAdjusted=$leftSpace"
+	addLog "D" "FullRangeMinInKB=$fullRangeMinInKB"
+	addLog "D" "FullRangeMax=$fullRangeMax"
+	addLog "D" "FullRangeMaxInKB=$fullRangeMaxInKB"
 	
-	if [ "$reconstructDb" = "N" ] && [ "$leftSpace" -le 0 ]; then
+	if [ "$reconstructDb" = "N" ] && [ "$removeFiles" = "N" ] && [ "$leftSpace" -ge "$fullRangeMinInKB" ] && [ "$leftSpace" -le "$fullRangeMaxInKB" ]; then
 		addLog "D" "Stop copy because disk is full"
 		break
 	fi
-
-	copyFiles "$currentFolder" "$folderDb" "$diskPath" "$foundDiskName" "$fullRangeMin" "$baseDir" "$globalList" "$reconstructDb"
 done
 
 

@@ -77,7 +77,7 @@ function prepareDatabase()
 	
 	## Prepare DB files for comparison
 	sort "$folderDb.size" > "$folderDb.size-s"
-	sort "$folderDb.usb-size" > "$folderDb.usb-size-s"
+	sort "$folderDb.usb-size" > "$folderDb.toverify"
 
 	if [ ! -f "$folderDb.list" ]; then
 		touch "$folderDb.list"
@@ -85,49 +85,48 @@ function prepareDatabase()
 
 	sort "$folderDb.list" > "$folderDb.list-s"
 
-	if [ ! -f "$folderDb.size-old-s" ]; then
-		touch "$folderDb.size-old-s"
-	fi
+	# Get differences between size-s and list-s
+	diff -u "$folderDb.size-s" "$folderDb.list-s" > "$folderDb.size-diff"
 
-	## Compare new and old lists (new files are considered only the second time the script is executed in case the file is currently beeing downloaded)
-	# Get changes between .size-old-s & .size-s
-	diff "$folderDb.size-s" "$folderDb.size-old-s" | grep "<" | sed 's/^< *//' > "$folderDb.size-diff"
-	# Keep only the ones from .list
-	awk 'FNR==NR {a[$1]=$0; gsub(" "$4" ", " |"$4" "); b[$1] = $0; next}; $0 != a[$1] && $1 in a {print b[$1]}' "$folderDb.size-diff" "$folderDb.list-s" | sed '/^$/d' > "$folderDb.size-diff-diff"
-
-	# Get no changes between .size-old-s & .size-s (files completed)
-	diff "$folderDb.size-s" "$folderDb.size-diff" | grep "<" | sed 's/^< *//' > "$folderDb.size-same"
-
-	# Keep the ones that differ from .list
-	diff "$folderDb.size-same" "$folderDb.list-s" > "$folderDb.size-same-diff0"
-	awk 'FNR==NR && $1 == ">" {a[$2]=$0; next}; FNR==NR {next}; $1 == "<" && $2 in a {gsub(" "$5" ", " |"$5" "); print $0; next}; $1 == "<" {print $0}' "$folderDb.size-same-diff0" "$folderDb.size-same-diff0" | sed 's/^[<>] //' | sed '/^$/d' > "$folderDb.size-same-diff"
+	# Keep the ones that differ from .list (files not copied)
+	awk '{
+		if (FNR == NR) 
+		{
+			if (substr($0,1,2) == "+/")
+			{
+				a[substr($1,2)]=$0;
+			}
+		} 
+		else
+		{
+			if (substr($0,1,2) == "-/" && ($2 * 1024) >= $3)
+			{
+				if (substr($1,2) in a) 
+				{
+					gsub(" "$4" ", " |"$4" ");
+				}
+				print substr($0,2);
+			}
+		}
+		}' "$folderDb.size-diff" "$folderDb.size-diff" > "$folderDb.size-changes"
 	
-	# Combine changes
-	cp "$folderDb.size-same-diff" "$folderDb.size-changes"
-	cat "$folderDb.size-diff-diff" >> "$folderDb.size-changes"
-	sort "$folderDb.size-changes" > "$folderDb.size-changes-s"
-	
-	# Create list of files to copy and ensure the files are complete
-	awk '($2 * 1024) >= $3 {print $0;}' "$folderDb.size-changes-s" > "$folderDb.tocopy"
-	
-	# Copy .size-s over .size-old-s
-	cp "$folderDb.size-s" "$folderDb.size-old-s"
-	
-	## List deleted files
-	diff "$folderDb.usb-size-s" "$folderDb.size-s" | grep "<" | sed 's/^< *//' > "$folderDb.todelete"
+	# Sort changes
+	sort "$folderDb.size-changes" > "$folderDb.tocopy"
 	
 	addLog "N" "Files comparison done"
 	addLog "D" "<--function prepareDatabase"
 }
 
-function deleteFiles()
+function verifyFiles()
 # $1 = baseDir
 # $2 = folderDb
 # $3 = diskPath
 # $4 = foundDiskName
 # $5 = globalList list file that contains all folders
+# $6 = removeFiles
+# $7 = reconstructDb
 {
-	addLog "D" "-->function deleteFiles"
+	addLog "D" "-->function verifyFiles"
 
 	# Parameters
 	local baseDir="$1"
@@ -135,36 +134,64 @@ function deleteFiles()
 	local diskPath="$3"
 	local foundDiskName="$4"
 	local globalList="$5"
-		
-	## Loop through files to delete and ensure it doesn't exist anymore in backup folder (and if so, delete the file on USB disk)
-	local line elementToDelete toEnsure elementToDeleteKey
-	while IFS='' read -r line || [[ -n "$line" ]]; do
-		toEnsure=$(echo "$line" | sed 's|^[^ ]* [^/]*||')
-		elementToDelete=$(echo "$toEnsure" | sed "s|^$baseDir|$diskPath|")
-		toDisplay=$(echo "$toEnsure" | sed "s|^$baseDir||")
-		elementToDeleteKey=$(escapeForRegEx $(echo "$line" | awk '{print $1}'))
-		
-		addLog "D" "Line=$line"
-		addLog "D" "ElementToDelete=$elementToDelete"
-		addLog "D" "ToEnsure=$toEnsure"
-		addLog "D" "ElementToDeleteKey=||$elementToDeleteKey||"
-				
-		if [ ! -f "$toEnsure" ] && [ ! -d "$toEnsure" ] && ([ -f "$elementToDelete" ] || [ -d "$elementToDelete" ]) ; then
-			# Delete file or folder from USB disk
-			addLog "N" "Deleting on disk \"$foundDiskName\" : $toDisplay"
-			
-			rm -rf "$elementToDelete"
-		fi
-		if [ ! -f "$toEnsure" ] && [ ! -d "$toEnsure" ]; then
-			# Remove entry from list file. It is done appart the first IF because if a folder is deleted, then the files underneath wouldn't be removed from the list file.
-			addLog "D" "Removed from list file"
-			
-			sed -i "/^$elementToDeleteKey /d" "$folderDb.list"
-			sed -i "/^$foundDiskName:$elementToDeleteKey /d" "$globalList"
-		fi
-	done < "$folderDb.todelete"
+	local removeFiles="$6"
+	local reconstructDb="$7"
 	
-	addLog "D" "<--function deleteFiles"
+	## Loop through files to delete and ensure it doesn't exist anymore in backup folder (and if so, delete the file on USB disk)
+	local line elementToVerify toEnsure toEnsureDiskSize elementToVerifyKey elementToVerifyKeyEscaped toEnsureDate listLine
+	if [ "$removeFiles" = "Y" ]; then
+		while IFS='' read -r line || [[ -n "$line" ]]; do
+			toEnsure=$(echo "$line" | sed 's|^[^ ]* [^/]*||')
+			elementToVerify=$(echo "$toEnsure" | sed "s|^$baseDir|$diskPath|")
+			toDisplay=$(echo "$toEnsure" | sed "s|^$baseDir||")
+			elementToVerifyKey=$(echo "$line" | awk '{print $1}')
+			elementToVerifyKeyEscaped=$(escapeForRegEx "$elementToVerifyKey")
+			
+			addLog "D" "Line=$line"
+			addLog "D" "ElementToVerify=$elementToVerify"
+			addLog "D" "ToEnsure=$toEnsure"
+			addLog "D" "ElementToVerifyKey=||$elementToVerifyKey||"
+					
+			if [ ! -f "$toEnsure" ] && [ ! -d "$toEnsure" ] && ([ -f "$elementToVerify" ] || [ -d "$elementToVerify" ]) ; then
+				# Delete file or folder from USB disk
+				addLog "N" "Deleting on disk \"$foundDiskName\" : $toDisplay"
+				
+				rm -rf "$elementToVerify"
+			fi
+			if [ ! -f "$toEnsure" ] && [ ! -d "$toEnsure" ]; then
+				# Remove entry from list file. It is done appart the first IF because if a folder is deleted, then the files underneath wouldn't be removed from the list file.
+				addLog "D" "Removed from list file"
+				
+				sed -i "/^$elementToVerifyKeyEscaped /d" "$folderDb.list"
+				sed -i "/^$foundDiskName:$elementToVerifyKeyEscaped /d" "$globalList"
+			fi
+		done < "$folderDb.toverify"
+	fi
+	
+	## Reconstruct database using USB disk files
+	if [ "$reconstructDb" = "Y" ]; then
+		awk '{
+			if (FILENAME ~ /\.size$/)
+			{
+				# build array of keys from size file
+				a[$1]=$0;
+			}
+			else if (FILENAME ~ /\.list$/)
+			{
+				# build array of keys from list file
+				b[$1]="a"; # value is not used
+			}
+			else if ($1 in a && !($1 in b))
+			{
+				print a[$1];
+			}
+			}' "$folderDb.size" "$folderDb.list" "$folderDb.toverify" > "$folderDb.list-r"
+		cat "$folderDb.list-r" >> "$folderDb.list"
+		awk "{print \"$foundDiskName\" \":\" \$0;}" "$folderDb.list-r" >> "$globalList"
+		rm "$folderDb.list-r"
+	fi
+	
+	addLog "D" "<--function verifyFiles"
 }
 
 function copyFiles()
@@ -175,7 +202,7 @@ function copyFiles()
 # $5 = fullRangeMin
 # $6 = baseDir
 # $7 = globalList list file that contains all folders
-# $8 = reconstructDb
+# $8 = fullRangeMax
 {
 	addLog "D" "-->function copyFiles"
 	# Parameters
@@ -186,7 +213,7 @@ function copyFiles()
 	local fullRangeMin="$5"
 	local baseDir="$6"
 	local globalList="$7"
-	local reconstructDb="$8"
+	local fullRangeMax="$8"
 
 	## For each elements to copy
 	## - Ensure not a folder
@@ -195,6 +222,7 @@ function copyFiles()
 	## - Add to the .list
 	local lastDir=$(cutPath1FromPath2 "$baseDir" "$currentFolder")
 	local fullRangeMinInKB=$(($fullRangeMin << 10))
+	local fullRangeMaxInKB=$(($fullRangeMax << 10))
 	
 	local elementToCopyKey elementToCopyDiskSize elementToCopyHasChanged elementToCopy
 	local line leftSpace=0 fileName pathEnd toFile toFileSize toFileDiskSize
@@ -223,6 +251,8 @@ function copyFiles()
 		addLog "D" "ElementToCopySize(s)=$elementToCopySize||$elementToCopyDiskSize||$elementToCopyHasChanged"
 		
 		if [ -d "$elementToCopy" ]; then
+			addLog "D" "Adding folder to list file"
+		
 			# If it is a folder, then only add it to the file list so it doesn't take any useless space on the backup disk
 			if [ "$elementToCopyHasChanged" = "1" ]; then
 				sed -i "\|^$elementToCopyKey |d" "$folderDb.list"
@@ -257,16 +287,16 @@ function copyFiles()
 			addLog "D" "LeftSpace=$leftSpace"
 			addLog "D" "FullRangeMin=$fullRangeMin"
 			addLog "D" "FullRangeMinInKB=$fullRangeMinInKB"
-			leftSpace=$((($leftSpace) - ($fullRangeMinInKB))) # All sizes have to be in kilobytes
-			addLog "D" "LeftSpaceAdjusted=$leftSpace"
+			addLog "D" "FullRangeMax=$fullRangeMax"
+			addLog "D" "FullRangeMaxInKB=$fullRangeMaxInKB"
 			
-			if [ "$reconstructDb" = "N" ] && [ "$leftSpace" -le 0 ]; then
+			if [ "$leftSpace" -ge "$fullRangeMinInKB" ] && [ "$leftSpace" -le "$fullRangeMaxInKB" ]; then
 				addLog "D" "Stop copy because disk is full"
 				break
 			fi
 			
-			leftSpace=$((($leftSpace) - ($elementToCopyDiskSize) + ($toFileDiskSize))) # All sizes have to be in kilobytes
-			addLog "D" "LeftSpaceAdjusted2=$leftSpace"
+			leftSpace=$((($leftSpace) - ($fullRangeMinInKB) - ($elementToCopyDiskSize) + ($toFileDiskSize))) # All sizes have to be in kilobytes
+			addLog "D" "LeftSpaceAdjusted=$leftSpace"
 			
 			# Echo debug informations
 			addLog "D" "CopyingFrom=$elementToCopy"
@@ -304,10 +334,10 @@ function copyFiles()
 			if [ $triedToCopy -eq 1 ] && [ "$backupResult" -eq "0" ]; then
 				if [ "$elementToCopyHasChanged" = "1" ]; then
 					# Remove current entry in the list file because of some changes (size, date)
-					sed "\|^$elementToCopyKey |d" "$folderDb.list" > "$folderDb.list2"
-					# Add rsync/copy file to the list file
-					cp "$folderDb.list2" "$folderDb.list"
+					sed -i "\|^$elementToCopyKey |d" "$folderDb.list"
+					sed -i "\|^$foundDiskName:$elementToCopyKey |d" "$globalList"
 				fi
+				# Add rsync/copy file to the list file
 				echo "$line" >> "$folderDb.list"
 				echo "$foundDiskName:$line" >> "$globalList"
 			elif [ $triedToCopy -eq 1 ]; then
