@@ -303,6 +303,10 @@ for iK in ${!folders[@]}; do
 	folderDb=$(echo "$currentFolder" | tr / .)
 	folderDb="$dbDir/$wantDiskName$folderDb"
 	
+	if [ "$deleteEmptyFolders" = "Y" ]; then
+		find "$currentFolder" -type d -empty -delete
+	fi
+	
 	prepareDatabase "$lsMethod" "$currentFolder" "$folderDb" "$exclusionFilter" "$diskPath" "$baseDir"
 
 	if [ "$removeFiles" = "Y" ] || [ "$reconstructDb" = "Y" ]; then
