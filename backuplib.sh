@@ -63,45 +63,69 @@ function prepareDatabase()
 	## Replace $diskPath by $currentFolder in "usb-fetch-2" file
 	cat "$folderDb.usb-fetch-2" | sed -E "s|([^ ]+)([^/]+)$diskPath|\1\2$baseDir|" > "$folderDb.usb-fetch-3"
 	
-	## Replace entry key by sha1 of file path
-	# Ref: https://stackoverflow.com/a/27931082/214898
-	awk '{
-		metaInfoLength=0
-		for (i=1; i<=7; i++)
-		{
-			metaInfoLength += length($i) + 1;
-		}
-		curFile=substr($0,metaInfoLength + 1);
-		command = ("echo '\''" curFile "'\'' | sha1sum -b | cut -d\\  -f 1");
-		command | getline hash;
-		close(command);
-		$1 = "/" hash;
-		print $0;
-		}' "$folderDb.fetch-3" > "$folderDb.fetch-4"
-		
-	awk '{
-		metaInfoLength=0
-		for (i=1; i<=7; i++)
-		{
-			metaInfoLength += length($i) + 1;
-		}
-		curFile=substr($0,metaInfoLength + 1);
-		command = ("echo '\''" curFile "'\'' | sha1sum -b | cut -d\\  -f 1");
-		command | getline hash;
-		close(command);
-		$1 = "/" hash;
-		print $0;
-		}' "$folderDb.usb-fetch-3" > "$folderDb.usb-size"
-	
-	## Remove not desired folders
+	## Remove not desired entries
 	if [ ! "$exclusionFilter" = "" ]; then
 		addLog "N" "Using filter: $exclusionFilter"
-		cat "$folderDb.fetch-4" | sed -E "s/^.*$exclusionFilter.*$//" | sed '/^$/d' > "$folderDb.size"
+		cat "$folderDb.fetch-3" | sed -E "s/^.*$exclusionFilter.*$//" | sed '/^$/d' > "$folderDb.fetch-4"
 	else
-		cp "$folderDb.fetch-4" "$folderDb.size"
+		cp "$folderDb.fetch-3" "$folderDb.fetch-4"
 	fi
 	
 	addLog "N" "Rearranging done"
+	
+	## Replace entry key by sha1 of file path
+	if [ ! -f "$folderDb.hash" ]; then
+		touch "$folderDb.hash"
+	fi
+	local awkGetFile='
+		function getFile(nbMetaInfoColumns)
+		{
+			metaInfoLength=0
+			for (i=1; i<=nbMetaInfoColumns; i++)
+			{
+				metaInfoLength += length($i) + 1;
+			}
+			return substr($0,metaInfoLength + 1);
+		}
+		'
+	# Ref: https://stackoverflow.com/a/27931082/214898
+	local awkHashReplacement='{
+		if (FILENAME ~ /\.hash$/)
+		{
+			curFile=getFile( 1 );
+			h[curFile]=$1;
+		}
+		else
+		{
+			curFile=getFile( 7 );
+			if (curFile in h)
+			{
+				hash=h[curFile];
+			}
+			else
+			{
+				gsub(/'"'"'/, "'"'\\\"'\\\"'"'", curFile); # Replacement of single quotes
+				command = ("echo \047" curFile "\047 | sha1sum -b | cut -d\\  -f 1");
+				command | getline hash;
+				close(command);
+				hash="/" hash
+			}
+			$1 = hash;
+			print $0;
+		}
+		}'"$awkGetFile"
+	awk "$awkHashReplacement" "$folderDb.hash" "$folderDb.fetch-4" > "$folderDb.size"
+	awk "$awkHashReplacement" "$folderDb.hash" "$folderDb.usb-fetch-3" > "$folderDb.usb-size"
+	
+	# Save already computed hash
+	local awkHashSaving='{
+		curFile=getFile(7);
+		print $1 " " curFile;
+		}'"$awkGetFile"
+	awk "$awkHashSaving" "$folderDb.size" > "$folderDb.hash"
+	awk "$awkHashSaving" "$folderDb.usb-size" >> "$folderDb.hash"
+	
+	addLog "N" "Hashing done"
 	
 	## Prepare DB files for comparison
 	sort "$folderDb.size" > "$folderDb.size-s"
