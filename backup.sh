@@ -8,18 +8,25 @@ source "$scriptDir/backuplib.sh"
 
 
 ## Ensure softwares needed exist, if so update it if necessary
-isExisting=$(isProgramExist "diff")
-if [ "$isExisting" = "N" ]; then
-	isExisting=$(isProgramExist "opkg")
-	if [ "$isExisting" = "N" ]; then
+isOpkgExisting=$(isProgramExist "opkg")
+isDiffExisting=$(isProgramExist "diff")
+if [ "$isDiffExisting" = "N" ]; then
+	if [ "$isOpkgExisting" = "N" ]; then
+		###TODO: The subdomain is not accessible anymore. Sent a message via http://www.zyxmon.org/kontakty/
 		## The specific architecture here (in the URL) doesn't matter because the script manage it
-		wget -O - http://entware.zyxmon.org/binaries/armv5/installer/entware_install.sh | /bin/sh
+		installScript=$(wget -O - http://entware.zyxmon.org/binaries/armv5/installer/entware_install.sh)
+		if [ "$?" != "0" ]; then
+			echo "Not able to download OPKG installer" >&2
+			exit
+		fi
+		/bin/sh <<< "$installScript"
 	fi
 	opkg install diffutils
-else
+elif [ "$isOpkgExisting" = "Y" ]; then
 	opkg update
 	opkg upgrade
 fi
+
 
 # Ensure "diff" exists (in case the download failed before)
 ensureProgramExist "diff"
@@ -308,7 +315,7 @@ for iK in ${!folders[@]}; do
 	fi
 	
 	prepareDatabase "$lsMethod" "$currentFolder" "$folderDb" "$exclusionFilter" "$diskPath" "$baseDir"
-
+	
 	if [ "$removeFiles" = "Y" ] || [ "$reconstructDb" = "Y" ]; then
 		verifyFiles "$baseDir" "$folderDb" "$diskPath" "$foundDiskName" "$globalList" "$removeFiles" "$reconstructDb"
 	fi
