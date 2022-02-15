@@ -128,14 +128,14 @@ function prepareDatabase()
 	addLog "N" "Hashing done"
 	
 	## Prepare DB files for comparison
-	sort "$folderDb.size" > "$folderDb.size-s"
-	sort "$folderDb.usb-size" > "$folderDb.toverify"
+	sort -f -k 8.1 "$folderDb.size" > "$folderDb.size-s"
+	sort -f -k 8.1 "$folderDb.usb-size" > "$folderDb.toverify"
 
 	if [ ! -f "$folderDb.list" ]; then
 		touch "$folderDb.list"
 	fi
 
-	sort "$folderDb.list" > "$folderDb.list-s"
+	sort -f -k 8.1 "$folderDb.list" > "$folderDb.list-s"
 
 	# Get differences between size-s and list-s
 	diff -u "$folderDb.size-s" "$folderDb.list-s" > "$folderDb.size-diff"
@@ -148,7 +148,7 @@ function prepareDatabase()
 			{
 				a[substr($1,2)]=$0;
 			}
-		} 
+		}
 		else
 		{
 			if (substr($0,1,2) == "-/" && ($2 * 1024) >= $3)
@@ -163,7 +163,7 @@ function prepareDatabase()
 		}' "$folderDb.size-diff" "$folderDb.size-diff" > "$folderDb.size-changes"
 	
 	# Sort changes
-	sort "$folderDb.size-changes" > "$folderDb.tocopy"
+	sort -f -k 8.1 "$folderDb.size-changes" > "$folderDb.tocopy"
 	
 	addLog "N" "Files comparison done"
 	addLog "D" "<--function prepareDatabase"
