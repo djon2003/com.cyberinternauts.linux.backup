@@ -149,21 +149,15 @@ function prepareDatabase()
 				a[substr($1,2)]=$0;
 			}
 		}
-		else
+		else if (substr($0,1,2) == "-/" && ($2 * 1024) >= $3)
 		{
-			if (substr($0,1,2) == "-/" && ($2 * 1024) >= $3)
+			if (substr($1,2) in a) 
 			{
-				if (substr($1,2) in a) 
-				{
-					gsub(" "$4" ", " |"$4" ");
-				}
-				print substr($0,2);
+				gsub(" "$4" ", " |"$4" ");
 			}
+			print substr($0,2);
 		}
-		}' "$folderDb.size-diff" "$folderDb.size-diff" > "$folderDb.size-changes"
-	
-	# Sort changes
-	sort -f -k 8.1 "$folderDb.size-changes" > "$folderDb.tocopy"
+		}' "$folderDb.size-diff" "$folderDb.size-diff" > "$folderDb.tocopy"
 	
 	addLog "N" "Files comparison done"
 	addLog "D" "<--function prepareDatabase"
