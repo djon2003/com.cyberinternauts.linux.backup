@@ -104,14 +104,14 @@ function prepareDatabase()
 			}
 			else
 			{
-				gsub(/'"'"'/, "'"'\\\"'\\\"'"'", curFile); # Replacement of single quotes
-				command = ("echo \047" curFile "\047 | sha1sum -b | cut -d\\  -f 1");
+				curFileEscaped=curFile
+				gsub(/'"'"'/, "'"'\\\"'\\\"'"'", curFileEscaped); # Replacement of single quotes
+				command = ("echo \047" curFileEscaped "\047 | sha1sum -b | cut -d\\  -f 1");
 				command | getline hash;
 				close(command);
 				hash="/" hash
 			}
-			$1 = hash;
-			print $0;
+			print hash " " $2 " " $3 " " $4 " " $5 " " $6 " " $7 " " curFile; #Not using $0 because if curFile contains double spaces, it is replaced by one
 		}
 		}'"$awkGetFile"
 	awk "$awkHashReplacement" "$folderDb.hash" "$folderDb.fetch-4" > "$folderDb.size"
