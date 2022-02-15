@@ -229,11 +229,43 @@ function verifyFiles()
 			}
 			else if ($1 in a && !($1 in b))
 			{
-				print a[$1];
+				split(a[$1],sizeInfo," ");
+				shallPrint=1
+				# Compare meta information to determinate if the file is the same (starting at position 2 to skip the key and disk size)
+				for(i=3; i<=7; i++)
+				{
+					if ($i != sizeInfo[i]) {
+						shallPrint=0;
+						break;
+					}
+				}
+				if (shallPrint == 1)
+				{
+					print a[$1];
+				}
 			}
 			}' "$folderDb.size" "$folderDb.list" "$folderDb.toverify" > "$folderDb.list-r"
-		cat "$folderDb.list-r" >> "$folderDb.list"
-		awk "{print \"$foundDiskName\" \":\" \$0;}" "$folderDb.list-r" >> "$globalList"
+		
+		reconstructDbContentSize=$(stat -c %s "$folderDb.list-r" 2>/dev/null)
+		if [ "$reconstructDbContentSize" != "" ] && [ "$reconstructDbContentSize" -gt 0 ]; then
+			# Add reconstruct DB to list files
+			cat "$folderDb.list-r" >> "$folderDb.list"
+			awk "{print \"$foundDiskName\" \":\" \$0;}" "$folderDb.list-r" >> "$globalList"
+			# Remove from files to be copied/rsync
+			awk '{
+				if (FILENAME ~ /\.list\-r$/)
+				{
+					# build array of keys from size file
+					a[$1]=$0;
+				}
+				else if (!($1 in a))
+				{
+					print $0;
+				}
+				}' "$folderDb.list-r" "$folderDb.tocopy" >> "$folderDb.tocopy-r"
+			rm "$folderDb.tocopy"
+			mv "$folderDb.tocopy-r" "$folderDb.tocopy"
+		fi
 		rm "$folderDb.list-r"
 	fi
 	
