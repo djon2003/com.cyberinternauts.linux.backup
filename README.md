@@ -10,8 +10,8 @@ Using a NAS in RAID-5 or even RAID-1 (or others) can protect you against a disk 
 - Download all files or clone the repository.
 - Setup the configuration file "conf/test.conf" or create your own.
 - Connect a USB drive on your NAS having a name starting with what you set in the configuration file.
-- Ensure the file "backup.sh" is executable: use chmod.
-- Execute the script "backup.sh CONFIGURATION_FILE_PATH" twice. (Twice because the first execution list files and second compare what has changed)
+- Ensure the file "backup.sh" is executable: use "chmod +x backup.sh".
+- Execute the script "backup.sh CONFIGURATION_FILE_PATH".
 
 ## Recommended usage
 - Schedule the script to be executed twice each day (the second one being executed 30-60 minutes later).
