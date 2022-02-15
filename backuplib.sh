@@ -26,7 +26,7 @@ function prepareDatabase()
 	addLog "D" "DiskPath=$diskPath"
 	
 	## List existing USB disk files of current folder
-	touch "$folderDb.usb-fetch-1"
+	printf "" > "$folderDb.usb-fetch-1"
 	if [ -d "$diskPath/$lastDir" ]; then
 		if [ $lsMethod -eq 1 ]; then
 			executeAndFilterErrors "${errorsToFilter[@]}" "ls -lLAesR \"$diskPath/$lastDir\" >\"$folderDb.usb-fetch-1\""
