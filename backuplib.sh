@@ -51,14 +51,50 @@ function prepareDatabase()
 	cat "$folderDb.fetch-1" | grep -v "^[ ]*[0-9]\+[ ]\+l" > "$folderDb.fetch-2"
 	
 	## Rearrange file output to have a usable one
+	local awkRearrange='{
+		if ($0 ~ /^\/.*:$/)
+		{
+			# Line of folder
+			path=$0;
+			sub(/:$/, "", path);
+		}
+		else if (!($0 ~ /^total/) && $0 != "")
+		{
+			# Line of entry in the folder
+			setDateAndFileName();
+			
+			fileDiskSize=$1;
+			fileSize=$6;
+			fileKey=path "/" fileName;
+			gsub(" ", "_", fileKey);
+			entryExtraInfo=substr($2, 1, 1);
+			
+			print fileKey" "entryExtraInfo" "fileDiskSize" "fileSize" "fileDate" "path"/"fileName;
+		}
+		}'
 	if [ $lsMethod -eq 1 ]; then
-		cat "$folderDb.fetch-2" | awk '/:$/&&f{s=$0;f=0}/:$/&&!f{sub(/:$/,"");s=$0;f=1;next}NF&&f{ sd=$1; sr=$6; dd=$8" "$9" "$10" "$11; gsub(/^ *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* /,"");mm=$0; ff=s"/"mm; $0=ff; gsub(" ","_"); print $0" "sd" "sr" "dd" "ff}' > "$folderDb.fetch-3"
-		cat "$folderDb.usb-fetch-1" | awk '/:$/&&f{s=$0;f=0}/:$/&&!f{sub(/:$/,"");s=$0;f=1;next}NF&&f{ sd=$1; sr=$6; dd=$8" "$9" "$10" "$11; gsub(/^ *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* /,"");mm=$0; ff=s"/"mm; $0=ff; gsub(" ","_"); print $0" "sd" "sr" "dd" "ff}' > "$folderDb.usb-fetch-2"
+		local awkSetDateAndFileName='
+			function setDateAndFileName()
+			{
+				fileDate=$8" "$9" "$10" "$11;
+				fileName=$0;
+				gsub(/^ *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* /, "", fileName);
+			}
+			'
 	else
 		# Columns of "ls" shall be SizeInBlock Rights User Group Size MonthAsThreeLetters DayOfMonth Time(HH:mm:ss) Year FileName
-		cat "$folderDb.fetch-2" | sed '/^total/ d' | awk '/:$/&&f{s=$0;f=0}/:$/&&!f{sub(/:$/,"");s=$0;f=1;next}NF&&f{ sd=$1; sr=$6; dd=$7" "$8" "$9" "$10; gsub(/^ *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* /,"");mm=$0; ff=s"/"mm; $0=ff; gsub(" ","_"); print $0" "sd" "sr" "dd" "ff}' > "$folderDb.fetch-3"
-		cat "$folderDb.usb-fetch-1" | sed '/^total/ d' | awk '/:$/&&f{s=$0;f=0}/:$/&&!f{sub(/:$/,"");s=$0;f=1;next}NF&&f{ sd=$1; sr=$6; dd=$7" "$8" "$9" "$10; gsub(/^ *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* /,"");mm=$0; ff=s"/"mm; $0=ff; gsub(" ","_"); print $0" "sd" "sr" "dd" "ff}' > "$folderDb.usb-fetch-2"
+		local awkSetDateAndFileName='
+			function setDateAndFileName()
+			{
+				fileDate=$7" "$8" "$9" "$10;
+				fileName=$0;
+				gsub(/^ *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* *[^ ]* /, "", fileName);
+			}
+			'
 	fi
+	awkRearrange="$awkRearrange $awkSetDateAndFileName"
+	awk "$awkRearrange" "$folderDb.fetch-2" > "$folderDb.fetch-3"
+	awk "$awkRearrange" "$folderDb.usb-fetch-1" > "$folderDb.usb-fetch-2"
 	
 	## Replace $diskPath by $currentFolder in "usb-fetch-2" file
 	cat "$folderDb.usb-fetch-2" | sed -E "s|([^ ]+)([^/]+)$diskPath|\1\2$baseDir|" > "$folderDb.usb-fetch-3"
@@ -97,7 +133,7 @@ function prepareDatabase()
 		}
 		else
 		{
-			curFile=getFile( 7 );
+			curFile=getFile( 8 );
 			if (curFile in h)
 			{
 				hash=h[curFile];
@@ -111,7 +147,7 @@ function prepareDatabase()
 				close(command);
 				hash="/" hash
 			}
-			print hash " " $2 " " $3 " " $4 " " $5 " " $6 " " $7 " " curFile; #Not using $0 because if curFile contains double spaces, it is replaced by one
+			print hash " " $2 " " $3 " " $4 " " $5 " " $6 " " $7 " " $8 " " curFile; #Not using $0 because if curFile contains double spaces, it is replaced by one
 		}
 		}'"$awkGetFile"
 	awk "$awkHashReplacement" "$folderDb.hash" "$folderDb.fetch-4" > "$folderDb.size"
@@ -119,7 +155,7 @@ function prepareDatabase()
 	
 	# Save already computed hash
 	local awkHashSaving='{
-		curFile=getFile(7);
+		curFile=getFile(8);
 		print $1 " " curFile;
 		}'"$awkGetFile"
 	awk "$awkHashSaving" "$folderDb.size" > "$folderDb.hash"
@@ -128,14 +164,14 @@ function prepareDatabase()
 	addLog "N" "Hashing done"
 	
 	## Prepare DB files for comparison
-	sort -f -k 8.1 "$folderDb.size" > "$folderDb.size-s"
-	sort -f -k 8.1 "$folderDb.usb-size" > "$folderDb.toverify"
+	sort -f -k 9.1 "$folderDb.size" > "$folderDb.size-s"
+	sort -f -k 9.1 "$folderDb.usb-size" > "$folderDb.toverify"
 
 	if [ ! -f "$folderDb.list" ]; then
 		touch "$folderDb.list"
 	fi
 
-	sort -f -k 8.1 "$folderDb.list" > "$folderDb.list-s"
+	sort -f -k 9.1 "$folderDb.list" > "$folderDb.list-s"
 
 	# Get differences between size-s and list-s
 	diff -u "$folderDb.size-s" "$folderDb.list-s" > "$folderDb.size-diff"
@@ -149,11 +185,11 @@ function prepareDatabase()
 				a[substr($1,2)]=$0;
 			}
 		}
-		else if (substr($0,1,2) == "-/" && ($2 * 1024) >= $3)
+		else if (substr($0,1,2) == "-/" && ($3 * 1024) >= $4)
 		{
 			if (substr($1,2) in a) 
 			{
-				gsub(" "$4" ", " |"$4" ");
+				gsub(" "$5" ", " |"$5" ");
 			}
 			print substr($0,2);
 		}
@@ -231,12 +267,16 @@ function verifyFiles()
 			{
 				split(a[$1],sizeInfo," ");
 				shallPrint=1
-				# Compare meta information to determinate if the file is the same (starting at position 2 to skip the key and disk size)
-				for(i=3; i<=7; i++)
+				entryType=substr($2, 1, 1)
+				if (entryType != "d")
 				{
-					if ($i != sizeInfo[i]) {
-						shallPrint=0;
-						break;
+					# Compare meta information to determinate if the file is the same (starting at position 4 to skip the key, entry extra infos and disk size)
+					for(i=4; i<=8; i++)
+					{
+						if ($i != sizeInfo[i]) {
+							shallPrint=0;
+							break;
+						}
 					}
 				}
 				if (shallPrint == 1)
@@ -311,9 +351,10 @@ function copyFiles()
 		fi
 		
 		elementToCopyKey=$(echo "$line" | awk '{print $1}')
-		elementToCopyDiskSize=$(echo "$line" | awk '{print $2}')
-		elementToCopySize=$(echo "$line" | awk '{print $3}')
-		elementToCopyHasChanged=$(echo "$line" | awk '{print $4}' | sed 's/[A-Za-z]//g')
+		elementToCopyExtraInfos=$(echo "$line" | awk '{print $2}')
+		elementToCopyDiskSize=$(echo "$line" | awk '{print $3}')
+		elementToCopySize=$(echo "$line" | awk '{print $4}')
+		elementToCopyHasChanged=$(echo "$line" | awk '{print $5}' | sed 's/[A-Za-z]//g')
 		if [ "$elementToCopyHasChanged" = "" ]; then
 			elementToCopyHasChanged=0
 		else
