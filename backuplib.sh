@@ -462,7 +462,7 @@ function copyFiles()
 			elif [ $triedToCopy -eq 1 ]; then
 				# Remove the copied file upon failure
 				rm "$toFile"
-				echo "Error - copy/rsync exit code: $?" >&2
+				addLog "E" "Error - copy/rsync exit code: $backupResult"
 			fi
 		fi
 	done < "$folderDb.tocopy"
@@ -526,14 +526,14 @@ function ensureDisk()
 
 	if [ $foundDiskCount -eq 0 ]; then
 		local mailMessage="No USB disk found starting with name $wantDiskName"
-		echo "$mailMessage"
+		addLog "N" "$mailMessage" # Not considered as an error so the email used is not the one for errors
 		sendMail "N" "QNAP - Missing disk" "$mailMessage"
 		exit
 	fi
 
 	if [ $foundDiskCount -ne 1 ]; then
 		local mailMessage="More than one USB disk found starting with name $wantDiskName"
-		echo "$mailMessage"
+		addLog "N" "$mailMessage" # Not considered as an error so the email used is not the one for errors
 		sendMail "N" "QNAP - More than one disk" "$mailMessage"
 		exit
 	fi
@@ -544,7 +544,7 @@ function ensureDisk()
 	local isError=$(ls -s "$diskErrorFile" | awk '{print $1}')
 	if [ ! "$isError" = "0" ]; then
 		local mailMessage="Disk $foundDiskName has errors. Please do a file verification."
-		echo "$mailMessage" >&2
+		addLog "E" "$mailMessage"
 		sendMail "Y" "QNAP - Disk having errors" "$mailMessage"
 		exit
 	fi
@@ -562,14 +562,14 @@ function ensureDiskConnected()
 	local writePossible=$(echo "Y" > "$testingFile" && echo "1")
 	
 	if [ "$mountExists" = "" ] || [ "$writePossible" = "" ]; then
-		echo "Disk $diskName disconnected or impossible to write a test file" >&2
+		addLog "E" "Disk $diskName disconnected or impossible to write a test file"
 		exit
 	fi
 	
 	rm -rf "$testingFile" 2>/dev/null # Skip error once
 	if [ $? -ne 0 ]; then
 		rm -rf "$testingFile" 2>/dev/null
-		echo "Disk $diskName disconnected or impossible to delete the test file" >&2
+		addLog "E" "Disk $diskName disconnected or impossible to delete the test file"
 		exit
 	fi
 }
