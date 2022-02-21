@@ -16,7 +16,7 @@ if [ "$isDiffExisting" = "N" ]; then
 		## The specific architecture here (in the URL) doesn't matter because the script manage it
 		installScript=$(wget -O - http://entware.zyxmon.org/binaries/armv5/installer/entware_install.sh)
 		if [ "$?" != "0" ]; then
-			echo "Not able to download OPKG installer" >&2
+			addLog "E" "Not able to download OPKG installer"
 			exit
 		fi
 		/bin/sh <<< "$installScript"
@@ -122,17 +122,17 @@ trap sendErrorMailOnExit EXIT
 ## Execution of script
 #### #### #### #### #### #### #### ####
 
-echo "Backup started"
+addLog "N" "Backup started"
 
 fileName=$1
 
 if [ "$#" -eq 0 ]; then
-	echo "Backup shall be called with a configuration filename" >&2
+	addLog "E" "Backup shall be called with a configuration filename"
 	exit
 fi
 
 if [ ! -f "$fileName" ]; then
-	echo "Configuration file doesn't exist : $fileName" >&2
+	addLog "E" "Configuration file doesn't exist : $fileName"
 	exit
 fi
 
@@ -144,7 +144,7 @@ if [ ! -d $dbDir ]; then
 fi
 
 ## Read configuration file
-echo "Reading configuration : $fileName"
+addLog "N" "Reading configuration : $fileName"
 
 # Convert DOS to Unix newline char(s)
 confFile=$(echo $fileName | awk -F "/" '{print $NF}')
@@ -230,9 +230,10 @@ if [ "$logLevel" != "DEBUG" ] && [ "$logLevel" != "ERRORS" ]; then
 fi
 activateLogs "$logOutput"
 
+
 ## Output configuration file errors after logs activation so it can be logged.
 if [ "$confError" != "" ]; then
-	printf "$confError" >&2
+	addLog "E" "$confError"
 	sendMail "Y" "Configuration file errors" "Configuration file: $1"$'\n\n'"$confError"
 	exit
 fi
@@ -255,7 +256,7 @@ done
 ## Ensure at least one folder to synch
 if [ ${#folders[@]} -eq 0 ]; then
 	mailMessage="No folder set to backup."
-	echo "$mailMessage" >&2
+	addLog "E" "$mailMessage"
 	sendMail "N" "QNAP - Missing folder to backup" "$mailMessage"
 	exit
 fi
