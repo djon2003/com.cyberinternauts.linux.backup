@@ -14,7 +14,8 @@ Using a NAS in RAID-5 or even RAID-1 (or others) can protect you against a disk 
 - Execute the script "backup.sh CONFIGURATION_FILE_PATH".
 
 ## Recommended usage
-- Schedule the script to be executed twice each day (the second one being executed 30-60 minutes later).
+- Schedule "backups.sh" to be executed each day
+  - See https://wiki.qnap.com/wiki/Add_items_to_crontab on how to setup a cronjob on QNAP
 - Ensure to have an email address set in the configuration file.
 
 With this setup you will receive an email when the external disk is full and you need to plug another one.
