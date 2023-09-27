@@ -35,7 +35,7 @@ ensureProgramExist "diff"
 launchOnlyOnce
 
 # Switch to script directory
-setDirToScriptOne
+switchToScriptDirectory
 
 #### #### #### #### #### #### #### ####
 ## Base variables definitions
