@@ -587,7 +587,7 @@ function getDiskFreeSpace()
 	fi
 	
 	local diskSpaceLine2
-	local diskSpaceLine=$(df -$returnUnit $diskPath)
+	local diskSpaceLine=$(df -$returnUnit "$diskPath")
 	IFS=' ' read -rd '' -a diskSpaceLine2 <<< "$diskSpaceLine"
 	local freeSpace=${diskSpaceLine2[9]} # 9th position is available space
 	
